@@ -20,6 +20,12 @@ class FDCTest : public ::testing::Test {
     };
     fdc_.config.read_image_byte = [](void* context, uint8_t drive,
                                      uint32_t offset) -> uint8_t {
+      FDCTest* test = static_cast<FDCTest*>(context);
+      if (test->num_bytes_read_ == 0) {
+        test->first_read_offset_ = offset;
+      }
+      test->last_read_offset_ = offset;
+      ++test->num_bytes_read_;
       // Return a pattern based on offset.
       return (uint8_t)(offset & 0xFF);
     };
@@ -73,6 +79,9 @@ class FDCTest : public ::testing::Test {
   bool dma_requested_ = false;
   DmaMode dma_mode_ = kDmaModeRead;
   uint8_t last_dma_byte_ = 0;
+  uint32_t first_read_offset_ = 0;
+  uint32_t last_read_offset_ = 0;
+  uint32_t num_bytes_read_ = 0;
   uint8_t last_written_byte_ = 0;
   uint32_t last_written_offset_ = 0;
   // Every byte written to the image, by offset.
@@ -90,6 +99,21 @@ class FDCTest : public ::testing::Test {
     ReadResult();
     ReadResult();
     irq6_raised_ = false;
+  }
+
+  // Issue Read Data or Write Data (MFM, 512-byte sectors, EOT=9).
+  void StartTransfer(
+      uint8_t command, uint8_t drive, uint8_t cylinder, uint8_t head,
+      uint8_t sector) {
+    SendCommand(command);
+    SendParameter((uint8_t)(((head & 0x01) << 2) | (drive & 0x03)));
+    SendParameter(cylinder);
+    SendParameter(head);
+    SendParameter(sector);
+    SendParameter(0x02);
+    SendParameter(0x09);
+    SendParameter(0x2A);
+    SendParameter(0xFF);
   }
 
   // Issue Format Track for drive 0: MFM, 512-byte sectors, a gap length of
@@ -756,6 +780,166 @@ TEST_F(FDCTest, SpecifyCommand) {
 
   // Verify no interrupt was raised.
   EXPECT_FALSE(irq6_raised_);
+}
+
+TEST_F(FDCTest, FindFormatReturnsFormatForKnownSizesOnly) {
+  ASSERT_EQ(Y_FDC_NUM_FORMATS, 2);
+  EXPECT_EQ(Y_FDC_FORMAT_360KB_IMAGE_SIZE, 368640);
+  EXPECT_EQ(Y_FDC_FORMAT_720KB_IMAGE_SIZE, 737280);
+  EXPECT_EQ(Y_FDC_MAX_IMAGE_SIZE, Y_FDC_FORMAT_720KB_IMAGE_SIZE);
+  EXPECT_EQ(YFDCFormatImageSizes[0], (uint32_t)Y_FDC_FORMAT_360KB_IMAGE_SIZE);
+  EXPECT_EQ(YFDCFormatImageSizes[1], (uint32_t)Y_FDC_FORMAT_720KB_IMAGE_SIZE);
+
+  const YFDCDiskFormat* format_360 =
+      YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE);
+  ASSERT_NE(format_360, nullptr);
+  EXPECT_EQ(format_360->num_heads, 2);
+  EXPECT_EQ(format_360->num_tracks, 40);
+  EXPECT_EQ(format_360->num_sectors_per_track, 9);
+  EXPECT_EQ(format_360->sector_size, 512);
+
+  const YFDCDiskFormat* format_720 =
+      YFDCFindFormat(Y_FDC_FORMAT_720KB_IMAGE_SIZE);
+  ASSERT_NE(format_720, nullptr);
+  EXPECT_EQ(format_720->num_heads, 2);
+  EXPECT_EQ(format_720->num_tracks, 80);
+  EXPECT_EQ(format_720->num_sectors_per_track, 9);
+  EXPECT_EQ(format_720->sector_size, 512);
+
+  EXPECT_EQ(YFDCFindFormat(0), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE - 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE + 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_720KB_IMAGE_SIZE - 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_720KB_IMAGE_SIZE + 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(1474560), nullptr);
+}
+
+TEST_F(FDCTest, ReadData720KBLastSector) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
+  dma_mode_ = kDmaModeRead;
+
+  // Cylinder 79, head 1, sector 9: the last sector of a 720KB image.
+  StartTransfer(0x46, /*drive=*/0, /*cylinder=*/79, /*head=*/1, /*sector=*/9);
+
+  YFDCTick(&fdc_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_EXECUTION);
+
+  for (int i = 0; i < 512; ++i) {
+    dma_requested_ = false;
+    YFDCTick(&fdc_);
+    EXPECT_TRUE(dma_requested_);
+    EXPECT_EQ(last_dma_byte_, (uint8_t)(i & 0xFF));
+  }
+
+  YFDCHandleTC(&fdc_);
+  YFDCTick(&fdc_);
+
+  EXPECT_EQ(num_bytes_read_, 512u);
+  EXPECT_EQ(first_read_offset_, 737280u - 512u);
+  EXPECT_EQ(last_read_offset_, 737280u - 1u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult() & Y_FDC_ST0_INTERRUPT_CODE_MASK, 0x00);
+  EXPECT_EQ(ReadResult(), 0x00);
+  EXPECT_EQ(ReadResult(), 0x00);
+}
+
+TEST_F(FDCTest, WriteData720KBCylinder79) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
+  dma_mode_ = kDmaModeWrite;
+
+  // Cylinder 79, head 0, sector 1.
+  StartTransfer(0x45, /*drive=*/0, /*cylinder=*/79, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+  ASSERT_TRUE(dma_requested_);
+
+  for (int i = 0; i < 512; ++i) {
+    WriteDmaByte((uint8_t)(0xA0 + (i & 0x1F)));
+    if (i == 511) {
+      YFDCHandleTC(&fdc_);
+    }
+    YFDCTick(&fdc_);
+  }
+
+  const uint32_t expected_start = 79u * 2u * 9u * 512u;
+  ASSERT_EQ(written_.size(), 512u);
+  EXPECT_EQ(written_.begin()->first, expected_start);
+  EXPECT_EQ(written_.rbegin()->first, expected_start + 511u);
+  EXPECT_EQ(written_[expected_start], 0xA0);
+  EXPECT_EQ(written_[expected_start + 511u], 0xBF);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult() & Y_FDC_ST0_INTERRUPT_CODE_MASK, 0x00);
+}
+
+TEST_F(FDCTest, FormatTrack720KBCylinder79) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
+  SeekDrive0(79);
+  dma_mode_ = kDmaModeWrite;
+
+  StartFormat(/*head=*/1, /*sectors=*/9, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+  for (uint8_t sector = 1; sector <= 9; ++sector) {
+    SendSectorID(79, 1, sector, /*tc=*/sector == 9);
+  }
+
+  const uint32_t track_start = (79u * 2u * 9u + 9u) * 512u;
+  ASSERT_EQ(written_.size(), 9u * 512u);
+  EXPECT_EQ(written_.begin()->first, track_start);
+  EXPECT_EQ(written_.rbegin()->first, 737280u - 1u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), 0x04);
+  EXPECT_EQ(ReadResult(), 0x00);
+  EXPECT_EQ(ReadResult(), 0x00);
+  EXPECT_EQ(ReadResult(), 79);
+  EXPECT_EQ(ReadResult(), 1);
+  EXPECT_EQ(ReadResult(), 9);
+  EXPECT_EQ(ReadResult(), 2);
+}
+
+TEST_F(FDCTest, ReadData720KBRejectsCylinder80WithNoData) {
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
+  dma_mode_ = kDmaModeRead;
+
+  // Cylinder 80 is past the end of an 80-track 720KB disk.
+  StartTransfer(0x46, /*drive=*/0, /*cylinder=*/80, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+
+  EXPECT_EQ(num_bytes_read_, 0u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST1_NO_DATA);
+}
+
+TEST_F(FDCTest, FormatIsPerDrive360KBStillRejectsCylinder40) {
+  // Drive 0 holds 720KB and Drive 1 holds 360KB.
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
+  YFDCInsertDisk(&fdc_, 1, &YFDCFormat360KB);
+  dma_mode_ = kDmaModeRead;
+
+  // Cylinder 40 on Drive 1 (360KB) must fail with No Data.
+  StartTransfer(0x46, /*drive=*/1, /*cylinder=*/40, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+
+  EXPECT_EQ(num_bytes_read_, 0u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION | 0x01);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST1_NO_DATA);
+  for (int i = 2; i < 7; ++i) {
+    ReadResult();
+  }
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_IDLE);
+
+  // Cylinder 40 on Drive 0 (720KB) succeeds.
+  irq6_raised_ = false;
+  StartTransfer(0x46, /*drive=*/0, /*cylinder=*/40, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+  YFDCTick(&fdc_);
+  EXPECT_EQ(num_bytes_read_, 1u);
+  EXPECT_EQ(first_read_offset_, 40u * 2u * 9u * 512u);
 }
 
 }  // namespace

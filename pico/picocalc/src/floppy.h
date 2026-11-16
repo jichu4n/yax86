@@ -1,12 +1,12 @@
 // The floppies in drives A and B.
 //
 // At power on each drive holds the image its VM's configuration names, a
-// 360KB floppy on the SD card, or nothing. With no VM to start, drive A holds
-// the boot floppy built into flash and drive B is empty. What the guest
-// writes to an image on the card is written to the card. The
+// 360KB or 720KB floppy on the SD card, or nothing. With no VM to start, drive
+// A holds the 360KB boot floppy built into flash and drive B is empty. What
+// the guest writes to an image on the card is written to the card. The
 // built-in floppy cannot be written, and what the guest writes to it is
-// dropped. The menu can eject either drive's disk, and insert any 360KB image
-// on the card in its place.
+// dropped. The menu can eject either drive's disk, and insert any 360KB or
+// 720KB image on the card in its place.
 #ifndef YAX86_PICOCALC_FLOPPY_H
 #define YAX86_PICOCALC_FLOPPY_H
 
@@ -48,7 +48,7 @@ void FloppyEject(YFDCState* fdc, FloppyDrive drive);
 
 // Put the image at path on the card in a drive, in place of what was there.
 // Returns kDiskImageOpen if it went in, or why not, in which case the drive
-// is left empty. A 360KB image is the only size that fits.
+// is left empty. A 360KB or 720KB image fits.
 DiskImageStatus FloppyInsertImage(
     YFDCState* fdc, FloppyDrive drive, const char* path);
 

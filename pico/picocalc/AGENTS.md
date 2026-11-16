@@ -357,15 +357,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   video_adapter=cga
   ```
 
-  `fd1` and `fd2` are 360KB floppies, `hd1` and `hd2` the hard disk
-  controller's master and slave, each the core's 10MB drive, and
-  `video_adapter` is `cga` or `mda`, `cga` without it. Without a VM, the
-  built-in floppy runs with the CGA. A key `vm.cfg` has that this firmware
-  does not know is logged as `vm_config_key_ignored` on each read, with the
-  file's path and the key, and skipped, so a file written by a later firmware
-  still reads and a Configure save keeps the line; a bad value or path is
-  logged as `vm_config_problem`. Loading a VM logs `vm_loaded` with its `path`
-  and `video_adapter`.
+  `fd1` and `fd2` are 360KB or 720KB floppies, their format taken from the
+  image's size, `hd1` and `hd2` the hard disk controller's master and slave,
+  each the core's 10MB drive, and `video_adapter` is `cga` or `mda`, `cga`
+  without it. Without a VM, the built-in 360KB floppy runs with the CGA. A key
+  `vm.cfg` has that this firmware does not know is logged as
+  `vm_config_key_ignored` on each read, with the file's path and the key, and
+  skipped, so a file written by a later firmware still reads and a Configure
+  save keeps the line; a bad value or path is logged as `vm_config_problem`.
+  Loading a VM logs `vm_loaded` with its `path` and `video_adapter`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -576,18 +576,18 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **New VM is a form**: the name, typed in place while its row is chosen,
   floppy disks 1 and 2, hard disks 1 and 2, Video adapter - `CGA` or `MDA`,
   on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Floppy
-  disk 1 is Empty, New floppy image (360KB), or Existing floppy image, a
-  360KB image from the browser; floppy disk 2 is Disabled or any of those;
-  and a hard disk is Disabled, New disk image (10MB), or Existing disk
-  image, a 10MB one. A new VM starts with floppy disk 1 empty, floppy disk 2
-  and hard disk 2 disabled, a new disk image as hard disk 1, and `CGA`. An
-  existing image is shared, like any image outside the VM's folder. A floppy
-  drive with no disk is "empty" wherever the menu says what a drive holds,
-  as the status rows have it. Backspace on the form only ever erases the
-  name - Esc leaves it - so that a press meant for the name does not throw
-  the form away. One image in two drives is refused before anything is
-  written. Create writes `vm.cfg` with the drives there, as paths relative
-  to it, and `video_adapter`, always written as `cga` or `mda`, in one
+  disk 1 is Empty, New floppy image (360KB), New floppy image (720KB), or
+  Existing floppy image, a 360KB or 720KB image from the browser; floppy disk
+  2 is Disabled or any of those; and a hard disk is Disabled, New disk image
+  (10MB), or Existing disk image, a 10MB one. A new VM starts with floppy disk
+  1 empty, floppy disk 2 and hard disk 2 disabled, a new disk image as hard
+  disk 1, and `CGA`. An existing image is shared, like any image outside the
+  VM's folder. A floppy drive with no disk is "empty" wherever the menu says
+  what a drive holds, as the status rows have it. Backspace on the form only
+  ever erases the name - Esc leaves it - so that a press meant for the name
+  does not throw the form away. One image in two drives is refused before
+  anything is written. Create writes `vm.cfg` with the drives there, as paths
+  relative to it, and `video_adapter`, always written as `cga` or `mda`, in one
   `ConfigFileUpdate()` through `VMConfigSave()`, which removes the line of a
   drive left out and a line left with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
@@ -597,15 +597,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   lines. An image of the VM's own a drive stops holding stays in its folder -
   nothing is deleted behind the user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
-  was**: `fd1.img` or `fd2.img`, 360KB, for DOS's `FORMAT A:` -
-  which the floppy controller's Format Track makes possible - and `hd1.img`
-  or `hd2.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`.
-  A name already in the folder - an edit's new disk beside the old - gives
-  `hd1_2.img` to `hd1_9.img` and the like instead, so nothing is written
-  over. The
-  hard disk takes 5.1 seconds to write, a floppy a fifth of a second. Zeros
-  rather than space merely allocated, which would hold whatever the card
-  held there - an old file's sectors, which FDISK could take for a
+  was**: `fd1.img` or `fd2.img`, 360KB or 720KB, for DOS's `FORMAT` - which
+  the floppy controller's Format Track makes possible (see `core/AGENTS.md`
+  for formatting 720KB under MS-DOS 3.30) - and `hd1.img` or `hd2.img`, the
+  core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name already in the
+  folder - an edit's new disk beside the old - gives `hd1_2.img` to `hd1_9.img`
+  and the like instead, so nothing is written over. The hard disk takes 5.1
+  seconds to write, a 360KB floppy a fifth of a second, and a 720KB floppy half
+  a second. Zeros rather than space merely allocated, which would hold whatever
+  the card held there - an old file's sectors, which FDISK could take for a
   partition table.
 - **A clone copies through 32KB of the guest's RAM**, which is not the
   guest's until a VM starts, and is zeroed after. Whole runs of the card's
@@ -624,8 +624,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   prompting for a disk swap; DOS330 names `fd2=""` for that, and its boot
   is measured with two. `YPlatformConfig.num_floppy_drives` sets what the
   BIOS's DIP switches report.
-- **The menu changes the disk in either drive** for any 360KB image on the
-  card, or ejects it. `DiskImageClose()` writes back the sector held and
+- **The menu changes the disk in either drive** for any 360KB or 720KB image on
+  the card, or ejects it. `DiskImageClose()` writes back the sector held and
   closes the file; the FDC then reports the drive not ready, which DOS
   shows as "General Failure ... Abort, Retry, Fail?". The built-in floppy is
   not offered again once ejected - a reset brings it back.
@@ -643,6 +643,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   then files exactly the image size, each by name, with hidden and system
   entries left out. It holds 64, and says when a folder had more. Names are
   8.3, as FatFs is built without long names.
+- **A floppy image is 360KB (368,640 bytes) or 720KB (737,280 bytes)**, chosen
+  from the file's size by `YFDCFindFormat()`. On a computer, a blank 360KB
+  image is `dd if=/dev/zero of=fd1.img bs=512 count=720` (formatted with
+  `mformat -i fd1.img -f 360 ::`) and a blank 720KB image is
+  `dd if=/dev/zero of=fd1.img bs=512 count=1440` (formatted with
+  `mformat -i fd1.img -f 720 ::`). See `core/AGENTS.md` for how MS-DOS 3.30
+  reads, boots and formats 720KB images.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from

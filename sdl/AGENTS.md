@@ -16,10 +16,12 @@ An SDL3 runtime for the emulator, built natively and through Emscripten as
   an idle machine's cost tracks the callback rate. It sits *under* 1/60s
   because at exactly 1/60s a slightly early callback would halve the rate.
   Events are pumped on every callback.
-- An optional floppy image path, default `floppy_a.img`. **A 10MB hard disk
-  is attached by default** - blank unless `--hdd <image>` names one, to be
-  partitioned and formatted from DOS - and `--no-hdd` leaves it out. The
-  default matters because the browser build has no command line.
+- An optional floppy image path, default `floppy_a.img`, 360KB (368,640 bytes)
+  or 720KB (737,280 bytes) from `YFDCFindFormat()`; the browser build's
+  packaged boot floppy is 360KB. **A 10MB hard disk is attached by default** -
+  blank unless `--hdd <image>` names one, to be partitioned and formatted from
+  DOS - and `--no-hdd` leaves it out. The default matters because the browser
+  build has no command line.
 - `--cga` or `--mda`, default CGA, through `YPlatformConfig.video_adapter`
   before `YPlatformInit()`. It decides what the platform registers and what
   the PPI's DIP switches report, which the BIOS reads.

@@ -12,22 +12,33 @@ enum {
 };
 
 static DiskImage g_images[kNumFloppyDrives];
+// The format of the disk in each drive, or NULL when empty.
+static const YFDCDiskFormat* g_formats[kNumFloppyDrives];
 // The paths of the images, which the images point to.
 static char g_inserted_paths[kNumFloppyDrives][kFSMaxPath + 1];
 // Whether drive A holds the floppy built into flash.
 static bool g_is_built_in;
+
+static DiskImageStatus OpenDriveImage(FloppyDrive drive, const char* path) {
+  FSCopyPath(path, g_inserted_paths[drive]);
+  DiskImage* image = &g_images[drive];
+  const DiskImageStatus status = DiskImageOpenSizes(
+      image, g_inserted_paths[drive], YFDCFormatImageSizes, Y_FDC_NUM_FORMATS);
+  g_formats[drive] =
+      status == kDiskImageOpen ? YFDCFindFormat(image->size) : NULL;
+  return status;
+}
 
 void FloppyOpen(
     const char* const paths[kNumFloppyDrives], bool is_built_in,
     DiskImageStatus opened[kNumFloppyDrives]) {
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     DiskImage* image = &g_images[drive];
+    g_formats[drive] = NULL;
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;
     } else {
-      FSCopyPath(paths[drive], g_inserted_paths[drive]);
-      DiskImageOpen(
-          image, g_inserted_paths[drive], Y_FDC_FORMAT_360KB_IMAGE_SIZE);
+      OpenDriveImage((FloppyDrive)drive, paths[drive]);
     }
     opened[drive] = image->status;
   }
@@ -42,6 +53,7 @@ void FloppyOpen(
     const DiskImageStatus card = DiskImageMountCard();
     DiskImage* image = &g_images[kFloppyDriveA];
     image->status = card != kDiskImageOpen ? card : kDiskImageNotFound;
+    g_formats[kFloppyDriveA] = &YFDCFormat360KB;
     opened[kFloppyDriveA] = image->status;
   }
 }
@@ -81,15 +93,15 @@ void FloppyAttach(YFDCState* fdc) {
   fdc->config.read_image_byte = ReadByte;
   fdc->config.write_image_byte = WriteByte;
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
-    if (g_images[drive].status == kDiskImageOpen ||
-        (drive == kFloppyDriveA && g_is_built_in)) {
-      YFDCInsertDisk(fdc, drive, &YFDCFormat360KB);
+    if (g_formats[drive] != NULL) {
+      YFDCInsertDisk(fdc, drive, g_formats[drive]);
     }
   }
 }
 
 void FloppyEject(YFDCState* fdc, FloppyDrive drive) {
   DiskImageClose(&g_images[drive]);
+  g_formats[drive] = NULL;
   if (drive == kFloppyDriveA) {
     g_is_built_in = false;
   }
@@ -99,16 +111,12 @@ void FloppyEject(YFDCState* fdc, FloppyDrive drive) {
 DiskImageStatus FloppyInsertImage(
     YFDCState* fdc, FloppyDrive drive, const char* path) {
   FloppyEject(fdc, drive);
-  char* inserted_path = g_inserted_paths[drive];
-  FSCopyPath(path, inserted_path);
-  DiskImage* image = &g_images[drive];
-  const DiskImageStatus status =
-      DiskImageOpen(image, inserted_path, Y_FDC_FORMAT_360KB_IMAGE_SIZE);
+  const DiskImageStatus status = OpenDriveImage(drive, path);
   if (status != kDiskImageOpen) {
     // Nothing to fall back to: the drive stays empty.
-    image->status = kDiskImageEjected;
+    g_images[drive].status = kDiskImageEjected;
     return status;
   }
-  YFDCInsertDisk(fdc, drive, &YFDCFormat360KB);
+  YFDCInsertDisk(fdc, drive, g_formats[drive]);
   return status;
 }

@@ -15,9 +15,9 @@
 // in it. Floppy disk 2 not named is not there - the BIOS reports one floppy
 // drive, and DOS's B: is drive A by another name - and named as fd2="" it is
 // a drive with no disk. A hard disk not named, or named as "", is not there:
-// a hard disk with no image is no disk at all. Floppy images are 360KB and
-// hard disk images the core's 10MB drive. video_adapter is cga or mda, and
-// cga when not named. Keys this firmware does not know are skipped.
+// a hard disk with no image is no disk at all. Floppy images are 360KB or
+// 720KB and hard disk images the core's 10MB drive. video_adapter is cga or
+// mda, and cga when not named. Keys this firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 

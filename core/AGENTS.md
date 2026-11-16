@@ -268,6 +268,23 @@ visibility, and how performance work is measured - are in the root
 
 ## fdc - the floppy controller
 
+- **Two formats, 360KB (`YFDCFormat360KB`, 40 tracks) and 720KB
+  (`YFDCFormat720KB`, 80 tracks)**, both 2 heads and 9 sectors of 512 bytes a
+  track (368,640 and 737,280 bytes) at 250kbps double density, so the stock XT
+  controller reads and writes both without a data rate register or disk change
+  line. Hosts pick the format from the image's byte size with
+  `YFDCFindFormat()` and list accepted sizes from `YFDCFormatImageSizes`
+  (`Y_FDC_NUM_FORMATS`, largest `Y_FDC_MAX_IMAGE_SIZE`); any drive takes either
+  format.
+- **GLaBIOS has no `INT 13h AH=08h` (drive parameters)**, and passes cylinders
+  0-79 straight to the controller. MS-DOS 3.30 reads, writes and boots a
+  formatted 720KB image in either drive with no `CONFIG.SYS`, taking the
+  80-track geometry from the boot sector's BPB (`CHKDSK` reports 730,112
+  bytes). Formatting a blank 720KB image from DOS needs
+  `DEVICE=DRIVER.SYS /D:1 /F:2` (or `/D:0` for drive A) in `CONFIG.SYS`, which
+  adds a new drive letter, and `FORMAT <letter>:` (or `/S`) on that letter
+  without `/T` or `/N`: MS-DOS 3.30 does not recognize `DRIVPARM`, and its
+  `FORMAT` rejects `/T:80 /N:9` on both 360KB and `DRIVER.SYS` 720KB drives.
 - **Format Track fills a track's sectors from the IDs the guest gives it**,
   four bytes a sector by DMA: cylinder, head, sector number and size code.
   An image holds the standard layout and nothing else, so a sector is

@@ -15,8 +15,9 @@
 typedef struct VMDriveChoice {
   // The image in it, a path from the card's root, or empty for none.
   char path[kFSMaxPath + 1];
-  // Whether it is to have a new blank image of its own instead.
-  bool is_blank;
+  // Size in bytes of a new blank image of its own instead, or 0 if not a new
+  // blank image.
+  uint32_t blank_size;
   // Whether the drive is there: false for floppy disk 2 or a hard disk
   // disabled.
   bool is_present;
