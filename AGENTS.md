@@ -321,9 +321,10 @@ Alongside the table state:
 
 - **The invariant, and that it did not move**: `dos-boot` retires 2,353,188
   instructions in 27,922,137 emulated cycles paged at 640KB, and 2,328,491
-  in 27,707,022 direct at 128KB, at every level, every run. If either
-  moved, behaviour changed and the times are not comparable - say so and
-  explain why instead of presenting a speedup.
+  in 27,707,022 direct at 128KB (2,355,629 in 27,961,371 direct at 384KB on a
+  bare Pico 2), at every level, every run. If any count moved, behaviour
+  changed and the times are not comparable - say so and explain why instead of
+  presenting a speedup.
 - **How the baseline was obtained**: rebuilt from its own commit through
   `YAX86_CORE_ROOT` against the same harness, on the same board, in the same
   session. A figure from an earlier PR is a cross-check, not a baseline.

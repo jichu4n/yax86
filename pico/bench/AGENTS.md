@@ -31,19 +31,21 @@ work" in the root `AGENTS.md` for what a performance PR reports and why.
 
   | board | guest memory | header |
   | --- | --- | --- |
-  | a Pico in a PicoCalc | 640KB, all paged through the PSRAM with 128KB of SRAM frames | `paging=true guest_ram_kb=640` |
+  | a Pico or Pico 2 in a PicoCalc | 640KB, all paged through the PSRAM with 128KB (`pico`) or 384KB (`pico2`) of SRAM frames | `paging=true guest_ram_kb=640` |
   | a bare Pico | 128KB held directly in SRAM | `paging=false guest_ram_kb=128` |
+  | a bare Pico 2 | 384KB held directly in SRAM | `paging=false guest_ram_kb=384` |
 
 - **It is deterministic, with an invariant for each layout, every run, at
   every level**: paged, 2,353,188 retired instructions and 27,922,137
-  emulated cycles; direct, 2,328,491 and 27,707,022. The BIOS tests and DOS
-  sizes more memory at 640KB. If either moves, behaviour changed and the
+  emulated cycles; direct at 128KB (`pico`), 2,328,491 and 27,707,022; direct
+  at 384KB (`pico2`), 2,355,629 and 27,961,371. The BIOS tests and DOS sizes
+  more memory at larger layouts. If any count moves, behaviour changed and the
   times are not comparable.
 - **After the result come `psram`**, its state, which says why a run did not
   page, **and `paging`**: the pager's counts, which follow from the guest and
   repeat run to run, and `fault_us`, the time spent in the fault handler. At
   640KB the boot zero-fills every page once as the BIOS tests it, 2,560 of
-  them, and writes back 2,573.
+  them, and writes back 2,573 at 128KB of frames or 1,407 at 384KB.
 - The floppy is compiled into flash by the ROM generator, generated into the
   build directory rather than committed - at 360KB it is megabytes of C.
   Guest writes are discarded; nothing on the way to the prompt writes.
@@ -130,17 +132,18 @@ Notes on the machinery:
 ## Current figures
 
 GCC 16.2.0, SDK 2.3.1, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
-PicoCalc's Pico 2 (RP2350 A2, 128KB of SRAM frames), at #196:
+PicoCalc's Pico 2 (RP2350 A2, 384KB of SRAM frames), at #200:
 
 | guest memory | seconds | emulated MHz | MIPS | vs a real 8088 | image flash | image SRAM | core `.text` |
 | ------------ | ------- | ------------ | ---- | -------------- | ----------- | ---------- | ------------ |
-| 640KB paged | **3.688292** | **7.570** | **0.638** | **158.7%** | 468,484 | 194,800 | 88,853 |
-| 128KB direct | 2.910303 | 9.520 | 0.800 | 199.6% | 468,484 | 194,800 | 88,853 |
+| 640KB paged | **3.584092** | **7.791** | **0.657** | **163.3%** | 468,484 | 458,992 | 88,853 |
+| 384KB direct | 2.902128 | 9.635 | 0.812 | 202.0% | 468,484 | 458,992 | 88,853 |
 
-- At the Pico 2's stock 150MHz (PSRAM off, flash at 75MHz), 128KB direct runs
-  in 4.815486 seconds (5.754 MHz, 0.484 MIPS, 120.6% of a real 8088).
-- Paging with 128KB of SRAM frames costs the Pico 2's boot 27%, with 0.13
-  seconds in the fault handler.
+- At the Pico 2's stock 150MHz (PSRAM off, flash at 75MHz), 384KB direct runs
+  in 4.800739 seconds (5.824 MHz, 0.491 MIPS, 122.1% of a real 8088).
+- Paging with 384KB of SRAM frames costs the Pico 2's boot 24%, with 0.07
+  seconds in the fault handler (against 3.688149 seconds and 0.13 seconds in
+  faults with 128KB of frames).
 
 GCC 16.2.0, SDK 2.3.0, picotool 2.3.1, 250MHz, `-O3`, hot path in SRAM, on a
 PicoCalc's Pico, at #153:
@@ -181,8 +184,8 @@ At #89, 128K of guest RAM, GCC 16.2.0, SDK 2.3.0, picotool 2.3.0:
 - **Guest memory and the stack cannot collide**: guest RAM is in the main SRAM
   bank (256KB on `pico`, 512KB on `pico2`), the stack in SCRATCH_Y's own 4KB,
   with SCRATCH_X and unused heap (`__HeapLimit` less `__end__`: about 66KB on
-  `pico` and 324KB on `pico2` at 128KB of guest SRAM) between. The heap grows
-  away from guest RAM.
+  both `pico` at 128KB of guest SRAM and `pico2` at 384KB) between. The heap
+  grows away from guest RAM.
 
 ## PicoCalc workloads
 
@@ -204,26 +207,27 @@ pico/picocalc/debug.js run pico/bench/workloads/word.txt --timeout 900
   command's processor time is the change in the `pacing` group's `real_us`
   less `waited_us` and `paused_us`, and its time in faults the change in
   the `paging` group's `fault_us`.
-- On the PicoCalc at 250MHz with 128KB of SRAM frames, on a Pico (#145) and a
-  Pico 2 (#197):
+- On the PicoCalc at 250MHz, on a Pico with 128KB of SRAM frames (#145) and a
+  Pico 2 with 384KB:
 
   | command | Pico processor time | Pico faults | Pico 2 processor time | Pico 2 faults |
   | --- | --- | --- | --- | --- |
-  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% | 10.9s | 3.2% |
-  | running it | 7.0s | 0.1% | 3.8s | 0.3% |
-  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% | 6.7s | 0.9% |
-  | `TPC QSORT` | 2.2s | 2.5% | 1.3s | 4.1% |
-  | `BC QCARDS.BAS` | 32.1s | 0.3% | 18.3s | 0.4% |
-  | `LINK QCARDS` | 26.7s | 0.5% | 14.7s | 0.9% |
-  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% | 41.9s | 0.8% |
-  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% | 338.3s | 0.2% |
-  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% | 55.7s | 2.0% |
+  | `TCC` compiling and linking a 40-line program | 18.8s | 1.9% | 10.5s | 1.0% |
+  | running it | 7.0s | 0.1% | 3.7s | 0.1% |
+  | `TPC /B BREAKOUT`, six units | 11.3s | 0.5% | 6.5s | 0.1% |
+  | `TPC QSORT` | 2.2s | 2.5% | 1.2s | 0.0% |
+  | `BC QCARDS.BAS` | 32.1s | 0.3% | 18.0s | 0.0% |
+  | `LINK QCARDS` | 26.7s | 0.5% | 14.4s | 0.0% |
+  | `QBASIC /RUN`, arrays and strings | 81.7s | 0.4% | 41.1s | 0.0% |
+  | Word 5.5's Setup, decompressing 3MB, with the script's pauses at each screen | 561.4s | 0.1% | 333.9s | 0.0% |
+  | Word: typing, a spell check, Save As, opening README.DOC and 40 Page Downs | 83.5s | 1.3% | 54.1s | 0.7% |
 
   The first seven are "the seven commands" elsewhere. On a Pico they run at
-  67% to 121% of a real PC/XT, 78% together; on a Pico 2, 130% to 224%, 144%
-  together. Faults take the same wall time on both (the 62.5MHz PSRAM is the
-  same), so their share rises with the faster CPU, and they hold neither board
-  back.
+  67% to 121% of a real PC/XT, 78% together; on a Pico 2, 133% to 227%, 148%
+  together. With 384KB of SRAM frames on a Pico 2, the seven commands spend
+  0.14% of processor time in faults (down from 1.06% at 128KB and 0.42% at
+  256KB) and the Word session 0.67% (down from 1.98% at 128KB and 0.95% at
+  256KB) - see "Paging guest RAM" in `pico/picocalc/AGENTS.md`.
 - **A run's disk changes the next run**: the compilers leave their output,
   and Word's Setup records the name typed on its own files and skips asking
   next time. `workloads/word.txt` deletes `C:\WORD` after; a second run of

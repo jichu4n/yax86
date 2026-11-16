@@ -16,9 +16,10 @@
 //
 // Guest memory is laid out as pico/picocalc lays it out, by whether the
 // PSRAM answers at startup (yax86_pico.h): on a PicoCalc, 640KB paged through
-// the PSRAM, and on a bare Pico, 128KB held directly in SRAM. The two boot
-// differently, the BIOS testing and DOS sizing more memory, so each has its
-// own invariant, and the header's paging field says which a run had.
+// the PSRAM, and on a bare board, kPicoGuestSRAMSize held directly in SRAM
+// (128KB on a Pico, 384KB on a Pico 2). The two boot differently, the BIOS
+// testing and DOS sizing more memory, so each has its own invariant, and the
+// header's paging field says which a run had.
 //
 // Timing discipline: host I/O on this target is expensive enough to swamp what
 // is being measured - a blocking UART write costs orders of magnitude more
