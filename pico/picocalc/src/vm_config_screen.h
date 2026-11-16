@@ -1,7 +1,7 @@
 // A VM's configuration, as its vm.cfg holds it: for a new VM, from the VM
 // manager's New VM, or for an existing one, from its page's Configure. A
-// new VM's name, typed in place, what each drive holds, the video adapter and
-// the memory size, each chosen on a page of its own, then Create or Save.
+// new VM's name, typed in place, the memory size, the video adapter, and what
+// each drive holds, each chosen on a page of its own, then Create or Save.
 #ifndef YAX86_PICOCALC_VM_CONFIG_SCREEN_H
 #define YAX86_PICOCALC_VM_CONFIG_SCREEN_H
 
@@ -10,15 +10,15 @@
 #include "screen.h"
 #include "vm_manager.h"
 
-// Configure a new VM: no name, floppy disk 1 empty, floppy disk 2 and
-// hard disk 2 disabled, a new disk image as hard disk 1, CGA and 640K. Create
-// makes the VM and notes it in vm_manager before the screen goes back; a name
-// or drives that will not do show why, and the form stays. vm_manager must
+// Configure a new VM: no name, 640K, CGA, floppy disk 1 empty, floppy disk 2
+// and hard disk 2 disabled, and a new disk image as hard disk 1. Create makes
+// the VM and notes it in vm_manager before the screen goes back; a name or
+// drives that will not do show why, and the form stays. vm_manager must
 // outlive the screen.
 ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager);
 
 // Configure the existing VM at index in vm_manager's list, starting from its
-// drives, video adapter and memory size as its vm.cfg has them. Save writes the
+// memory size, video adapter and drives as its vm.cfg has them. Save writes the
 // configuration chosen, as for Create.
 ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index);
 

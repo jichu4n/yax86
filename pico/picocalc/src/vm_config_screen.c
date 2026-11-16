@@ -24,13 +24,13 @@ enum {
 
 typedef enum FormItem {
   kFormName = 0,
+  kFormMemory,
+  kFormVideoAdapter,
   // The drives' items, in the order of the VM's drives.
   kFormDriveA,
   kFormDriveB,
   kFormDriveC,
   kFormDriveD,
-  kFormVideoAdapter,
-  kFormMemory,
   kFormCreate,
   kNumFormItems,
 } FormItem;
@@ -52,9 +52,9 @@ static VMDriveChoice g_drives[kNumVMDrives];
 static VMMachine g_machine;
 
 // The form's first item: its name for a new VM; for an existing one, at
-// the drives. g_list_box.selected counts from it.
+// the memory size. g_list_box.selected counts from it.
 static uint8_t FirstItem(void) {
-  return g_is_existing ? kFormDriveA : kFormName;
+  return g_is_existing ? kFormMemory : kFormName;
 }
 
 static uint8_t SelectedItem(void) {
@@ -104,7 +104,7 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
       .video_adapter = config.video_adapter,
       .memory_kb = config.memory_kb,
   };
-  SelectItem(kFormDriveA);
+  SelectItem(kFormMemory);
   return ScreenOpen(&kVMConfigScreen);
 }
 
@@ -206,22 +206,22 @@ static bool TypeName(uint8_t key) {
 }
 
 // Carry out the item selected: create or save the VM, move on from the
-// name to the first drive, or open a drive's, the video adapter's or the
-// memory's choices.
+// name to the memory size, or open the memory's, the video adapter's or a
+// drive's choices.
 static ScreenResult OnSelect(void) {
   const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
     return g_is_existing ? Save() : Create();
   }
   if (item == kFormName) {
-    SelectItem(kFormDriveA);
+    SelectItem(kFormMemory);
     return ScreenStays();
-  }
-  if (item == kFormVideoAdapter) {
-    return VMVideoAdapterScreenOpen(&g_machine.video_adapter);
   }
   if (item == kFormMemory) {
     return VMMemoryScreenOpen(&g_machine.memory_kb);
+  }
+  if (item == kFormVideoAdapter) {
+    return VMVideoAdapterScreenOpen(&g_machine.video_adapter);
   }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
   return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
@@ -283,14 +283,16 @@ static void OnDraw(DisplayBox* box) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (BoxItem){rows[item], true};
   }
+  char memory[24];
+  VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
+  snprintf(
+      rows[kFormMemory], sizeof(rows[kFormMemory]), "%-15s %s", "Memory",
+      memory);
+  items[kFormMemory] = (BoxItem){rows[kFormMemory], true};
   snprintf(
       rows[kFormVideoAdapter], sizeof(rows[kFormVideoAdapter]), "%-15s %s",
       "Video adapter", VMConfigVideoAdapterLabel(g_machine.video_adapter));
   items[kFormVideoAdapter] = (BoxItem){rows[kFormVideoAdapter], true};
-  snprintf(
-      rows[kFormMemory], sizeof(rows[kFormMemory]), "%-15s %uK", "Memory",
-      (unsigned)g_machine.memory_kb);
-  items[kFormMemory] = (BoxItem){rows[kFormMemory], true};
   items[kFormCreate] = (BoxItem){g_is_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
       box, g_is_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL,

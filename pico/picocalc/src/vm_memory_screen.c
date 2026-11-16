@@ -2,25 +2,23 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "box.h"
 #include "display.h"
 #include "list_box.h"
+#include "yax86_pico.h"
 
-typedef struct MemoryPreset {
-  const char* label;
-  uint16_t memory_kb;
-} MemoryPreset;
-
-static const MemoryPreset kPresets[] = {
-    {"128K", 128},
-    {"256K", 256},
-    {"512K", 512},
-    {"640K", 640},
+static const uint16_t kPresets[] = {
+    128,
+    256,
+    512,
+    640,
 };
 
 enum {
   kNumPresets = sizeof(kPresets) / sizeof(kPresets[0]),
+  kLabelSize = 24,
 };
 
 extern const Screen kVMMemoryScreen;
@@ -30,16 +28,21 @@ static ListBox g_list_box;
 // The form's choice for the memory size, in KB.
 static uint16_t* g_chosen;
 
+void VMMemoryFormat(uint16_t memory_kb, char* buffer, size_t size) {
+  snprintf(
+      buffer, size, "%uK%s", (unsigned)memory_kb,
+      (uint32_t)memory_kb * 1024 > kPicoGuestSRAMSize ? " (paged)" : "");
+}
+
 // Index of the preset matching memory_kb, or the closest preset for a
 // hand-edited value in vm.cfg.
 static uint8_t PresetForMemoryKB(uint16_t memory_kb) {
   uint8_t best = 0;
   uint32_t best_distance = UINT32_MAX;
   for (uint8_t i = 0; i < kNumPresets; ++i) {
-    const uint32_t distance =
-        kPresets[i].memory_kb > memory_kb
-            ? (uint32_t)(kPresets[i].memory_kb - memory_kb)
-            : (uint32_t)(memory_kb - kPresets[i].memory_kb);
+    const uint32_t distance = kPresets[i] > memory_kb
+                                  ? (uint32_t)(kPresets[i] - memory_kb)
+                                  : (uint32_t)(memory_kb - kPresets[i]);
     if (distance < best_distance) {
       best_distance = distance;
       best = i;
@@ -57,7 +60,7 @@ ScreenResult VMMemoryScreenOpen(uint16_t* chosen) {
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
   switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumPresets)) {
     case kListBoxActionSelect:
-      *g_chosen = kPresets[g_list_box.selected].memory_kb;
+      *g_chosen = kPresets[g_list_box.selected];
       return ScreenBack();
     case kListBoxActionBack:
       return ScreenBack();
@@ -67,9 +70,11 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(DisplayBox* box) {
+  char labels[kNumPresets][kLabelSize];
   BoxItem items[kNumPresets];
   for (uint8_t i = 0; i < kNumPresets; ++i) {
-    items[i] = (BoxItem){kPresets[i].label, false};
+    VMMemoryFormat(kPresets[i], labels[i], sizeof(labels[i]));
+    items[i] = (BoxItem){labels[i], false};
   }
   ListBoxDrawItems(
       box, "Memory", NULL, 0, items, kNumPresets, g_list_box.selected, true);
