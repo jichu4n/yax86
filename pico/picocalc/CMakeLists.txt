@@ -166,6 +166,7 @@ add_executable(yax86_picocalc
     src/display.c
     src/display_power.c
     src/display_timeout_screen.c
+    src/boot_delay_screen.c
     src/file_list.c
     src/fs.c
     src/config_file.c

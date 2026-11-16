@@ -233,8 +233,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   code in SRAM has not been tried. Nor has timing a full graphics frame.
 - **The display turns off after `display_timeout` seconds with no key** (120
   without a setting): in launcher mode while neither counting down nor
-  exporting over USB, and in emulator mode once the boot is over or the menu is
-  open. `src/display_power.c` puts the panel's display off and into sleep,
+  exporting over USB (including a list waiting under `boot_delay=never`), and
+  in emulator mode once the boot is over or the menu is open.
+  `src/display_power.c` puts the panel's display off and into sleep,
   `LcdSetDisplayOn(false)` - a static image can mark the panel, though `0`
   (`Never`) lets the user opt out and keep it on - and on keyboard controller
   firmware v1.6 and later writes 0 to both backlight registers, turning the
@@ -382,8 +383,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   pattern, though DOS calls them A: and B:.
 - **`yax86/yax86.cfg` holds the card's settings**: `boot_default`, the name
   of the VM to highlight and start - `boot_default=DOS330` - `boot_delay`,
-  the seconds the list waits for a key, 5 without it, 0 to start the default
-  without showing the list, `font`, the 4x10 font (`ymini`, `atari800`,
+  the seconds the list waits for a key (0 to 60, 5 without it, 0 to start the
+  default without showing the list, or `never` to show the list and wait for a
+  key, set from Settings), `font`, the 4x10 font (`ymini`, `atari800`,
   `miniwi` or `creep`, `ymini` without it), `display_timeout`, the seconds
   with no key before the display turns off (0 to 3600, 120 without it, 0 to
   stay on), and `display_brightness` (1 to 255, 255 without it) and
@@ -396,8 +398,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `settings_problem`.
 - **At power on, with a card, the menu lists its VMs**, before the VM
   exists, then a separator line, Manage VMs - see below - USB mass storage -
-  see "The USB device" - and Settings (which holds Font and Display timeout). The countdown runs on
-  the list's bottom edge until a key is pressed, then the default starts.
+  see "The USB device" - and Settings (which holds Font, Display timeout and
+  Boot delay). The countdown runs on the list's bottom edge until a key is
+  pressed, then the default starts; Boot delay's `Start at once` (0) skips the
+  list from the next power on, with Power off in a VM's menu bringing it back,
+  and `Never` shows the list with no countdown, as after Power off.
   With no VMs the list has Manage VMs, USB mass storage and Settings, with no
   separator, and nothing counts down or starts by itself; the built-in floppy boots only without a
   card. Every page reached from the list is drawn the list's
@@ -406,8 +411,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   is not cga or mda` - as do bad settings, which start the countdown anyway
   with what was read. A `boot_default` naming no VM is one, and the
   first VM listed is the default instead, so a mistyped name still
-  boots. The countdown is what lets a board left alone, or a
-  host measuring the boot, still boot. `src/launcher_menu_screen.c` is
+  boots. Unless `boot_delay` is `never`, the countdown is what lets a board
+  left alone, or a host measuring the boot, still boot. `src/launcher_menu_screen.c` is
   the launcher menu, a screen like any other, and only chooses: it counts
   down, and opens the screen of each row itself, but a VM chosen, or the
   card given to the host by USB mass storage, closes it with why, in a
@@ -459,9 +464,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   it keeps those pointers and its own state, such as the item selected, in
   statics. `main.c` holds the models, `g_vms`, `g_settings` and `g_vm`,
   and passes them to `LauncherRun()`, which passes them down; nothing
-  asks the launcher for them back. Settings, Font and Display timeout
-  are screens, in `src/settings_screen.c`, `src/font_screen.c` and
-  `src/display_timeout_screen.c`, and so
+  asks the launcher for them back. Settings, Font, Display timeout and Boot
+  delay are screens, in `src/settings_screen.c`, `src/font_screen.c`,
+  `src/display_timeout_screen.c` and `src/boot_delay_screen.c`, and so
   are USB mass storage, the page while it exports, and the question before
   an unsafe disconnect, in `src/usb_storage*_screen.c`; and Manage VMs and every page
   under it, in `src/vm_manager_screen.c` and `src/vm_*screen.c`; and the list
@@ -952,8 +957,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   - The walk covers the menu and each of its pages: a drive's page, the
     browser, Status, and the questions before Reset and Power off. Then,
     powered off to the list: the list itself, Manage VMs, a VM's page, the
-    New VM form and a drive's choices on it, USB mass storage, Settings, Font
-    and Display timeout.
+    New VM form and a drive's choices on it, USB mass storage, Settings, Font,
+    Display timeout and Boot delay.
   - It only looks and backs out, with Esc or Cancel, so the card is as it
     was. Pages reached only by acting, such as copying or exporting, need a
     VM or an image made for the test, and deleted after.
@@ -1071,7 +1076,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   answers, are the VM's `paging`, `boot`, `display`, starting with
   `video_adapter`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. The
   launcher's are `display` with whether it is on, its timeout and the font,
-  `vm` with the number of VMs, and `menu` with the page showing; and
+  `vm` with the number of VMs, and `menu` with whether it is open, the page
+  showing and `boot_delay`; and
   as no guest runs yet, its `screen` answers `no_guest`, which `debug.js`'s
   `wait` takes as no match yet.
 - **`src/init.c` initializes the system at startup**, after `main()` has

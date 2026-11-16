@@ -9,6 +9,8 @@
 
 static const char kSettingsPath[] = "yax86/yax86.cfg";
 static const char kBootDefaultKey[] = "boot_default";
+static const char kBootDelayKey[] = "boot_delay";
+static const char kBootDelayNeverValue[] = "never";
 static const char kFontKey[] = "font";
 static const char kDisplayTimeoutKey[] = "display_timeout";
 static const char kDisplayBrightnessKey[] = "display_brightness";
@@ -35,12 +37,17 @@ static bool TakeSettingsPair(
         settings->boot_default, sizeof(settings->boot_default), "%s", value);
     return true;
   }
-  if (strcmp(key, "boot_delay") == 0) {
+  if (strcmp(key, kBootDelayKey) == 0) {
+    if (strcmp(value, kBootDelayNeverValue) == 0) {
+      settings->boot_delay = kSettingsBootDelayNever;
+      return true;
+    }
     uint64_t seconds = 0;
     if (!YLogfmtParseUInt(value, &seconds) || seconds > kSettingsMaxBootDelay) {
       snprintf(
-          problem, kConfigFileProblemLength + 1, "boot_delay is not 0 to %u",
-          (unsigned)kSettingsMaxBootDelay);
+          problem, kConfigFileProblemLength + 1,
+          "boot_delay is not 0 to %u or %s", (unsigned)kSettingsMaxBootDelay,
+          kBootDelayNeverValue);
       return false;
     }
     settings->boot_delay = (uint8_t)seconds;
@@ -151,6 +158,20 @@ bool SettingsSaveBootDefault(
   }
   snprintf(settings->boot_default, sizeof(settings->boot_default), "%s", name);
   return true;
+}
+
+bool SettingsSaveBootDelay(
+    Settings* settings, uint8_t boot_delay,
+    char problem[kConfigFileProblemLength + 1]) {
+  settings->boot_delay = boot_delay;
+  char number[4];
+  const char* value = kBootDelayNeverValue;
+  if (boot_delay != kSettingsBootDelayNever) {
+    snprintf(number, sizeof(number), "%u", (unsigned)boot_delay);
+    value = number;
+  }
+  const ConfigFileSetting setting = {.key = kBootDelayKey, .value = value};
+  return ConfigFileUpdate(kSettingsPath, &setting, 1, problem);
 }
 
 bool SettingsSaveFont(

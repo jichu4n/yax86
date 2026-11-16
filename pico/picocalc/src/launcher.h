@@ -3,9 +3,9 @@
 // At power on it reads the card: the VMs, the settings, and the start note,
 // which the in-VM menu's Reset and Power off leave across the reboot to say
 // what to do next. Then it does one of two things. It loads a VM to start at
-// once: the one reset, or the default when the settings ask for no
-// countdown. Or it shows the launcher menu, which lists the VMs for starting
-// one and counts down to the default. It runs the launcher menu until a VM
+// once: the one reset, or the default when boot_delay is 0. Or it shows the
+// launcher menu, which lists the VMs for starting one and counts down to the
+// default unless boot_delay is never. It runs the launcher menu until a VM
 // is loaded, answering debug commands and updating the status rows.
 //
 // It answers two debug commands itself: report, with the system's groups and
@@ -46,9 +46,10 @@ typedef enum StartIntent {
 //   - After a Reset, the VM reset starts again at once.
 //   - After a Power off, the launcher menu waits for a key, with the VM
 //     powered off selected.
-//   - At power on, the default starts at once if the settings ask for no
-//     countdown and have no problem to show; otherwise the launcher menu
-//     counts down to it, until a key is pressed.
+//   - At power on, the default starts at once if boot_delay is 0 and the
+//     settings have no problem to show; otherwise the launcher menu shows,
+//     counting down to the default unless boot_delay is never, until a key is
+//     pressed.
 // With no VMs the launcher menu offers Manage VMs, USB mass storage and
 // Settings, and nothing starts by itself. A VM whose vm.cfg does not read
 // leaves the launcher menu showing its problem.
