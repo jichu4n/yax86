@@ -110,19 +110,27 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **These counts are the 128KB machine's**, which a VM with `memory_kb=128`
   runs held directly in SRAM, as a Pico also does without the PSRAM or after a
   crash (on a Pico 2 that fallback is 384KB: 2,352,177 instructions and
-  27,921,416 cycles with no VMs, 2,441,987 and 29,158,902 on DOS330). With the
-  PSRAM, a VM asking for more than `kPicoGuestSRAMSize` pages all of its memory
-  (see "Paging guest RAM"), and DOS330 at the default 640KB boots in 2,439,664
-  instructions and 29,116,649 cycles, or 2,412,600 and 29,114,560 with
-  `video_adapter=mda`, the BIOS testing and DOS sizing more memory; the bench's
-  640KB `dos-boot` takes 2,353,188 and 27,922,137. On a Pico 2 at 250MHz,
-  DOS330 takes 3.82 seconds of processor time with drawing and 3.81 without at
-  640KB paged - 159% and 160% of a real PC/XT - and 3.74 with
-  `video_adapter=mda`; at 512KB paged it takes 3.94 seconds in 2,442,676
-  instructions and 29,158,902 cycles, at 384KB direct and 256KB direct 3.32
-  seconds (2,440,603 and 29,150,673 at 256KB), and at 128KB direct 3.11
-  seconds, 195% of a real PC/XT. The runtime with no VMs has not been counted
-  at 640KB.
+  27,921,416 cycles with no VMs). With the PSRAM, a VM asking for more than
+  `kPicoGuestSRAMSize` pages all of its memory (see "Paging guest RAM"), the
+  BIOS testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
+  2,353,188 and 27,922,137, and the runtime with no VMs has not been counted at
+  640KB. On a Pico 2 at 250MHz, DOS330 boots as follows:
+
+  | memory | layout | instructions | cycles | processor time | vs a real PC/XT |
+  | --- | --- | --- | --- | --- | --- |
+  | 128KB | direct | 2,416,289 | 28,884,456 | 3.11s | 195% |
+  | 256KB | direct | 2,440,603 | 29,150,673 | 3.32s | 184% |
+  | 384KB | direct | 2,441,987 | 29,158,902 | 3.32s | 184% |
+  | 512KB | paged (384KB frames) | 2,442,676 | 29,158,902 | 3.94s | 155% |
+  | 640KB | paged (384KB frames) | 2,439,664 | 29,116,649 | 3.82s (3.81s no-draw) | 160% |
+  | 640KB (`video_adapter=mda`) | paged (384KB frames) | 2,412,600 | 29,114,560 | 3.74s | 163% |
+
+  384KB direct and 512KB paged end on the same `29,158,902` cycle boundary
+  because the boot watches the screen every `kBootPollCycles` (238,636 cycles,
+  at 48,000-cycle batch boundaries): the extra eight 16KB POST block probes fit
+  within the poll window before DOS reaches its `"Enter new date"` polling
+  loop, so both advance on the same poll ticks while retiring different
+  instruction counts before `date_prompt`.
 
 ## Running in real time
 
@@ -814,9 +822,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   PSRAM is not available` or `the last start crashed`. A hard fault on either
   core reboots the board through `isr_hardfault()`, which replaces the SDK's
   breakpoint, and leaves a marker in RAM startup does not clear; the start
-  after it pages nothing, says so on the message row, and reports
-  `off_after_fault`. Paging is the newest code a fault could come from, and a
-  board that halts on one needs its cable replugged.
+  after it pages nothing and reports `off_after_fault`. Paging is the newest
+  code a fault could come from, and a board that halts on one needs its cable
+  replugged.
 - **The runtime reads the BIOS data area through the memory map**,
   `GuestRAMByte()`, since with the PSRAM it is paged.
 

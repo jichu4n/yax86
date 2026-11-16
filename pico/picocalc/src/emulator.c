@@ -234,7 +234,9 @@ static uint32_t RequestedRAMSize(void) {
                   : Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE;
 }
 
-// How much guest RAM the VM has.
+// How much guest RAM the VM has. Bounded to the valid conventional memory
+// range so that GCC's range analysis knows GuestRAMSize() / 1024 is at most
+// three digits when FormatSystemLine() is inlined (-Wformat-truncation).
 static uint32_t GuestRAMSize(void) {
   return g_guest_ram_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE
              ? Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE
@@ -597,9 +599,9 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
-// Hold guest RAM directly in SRAM when it fits, or when the PSRAM did not come
-// up or the last start ended in a hard fault, capped at kGuestRAMSize;
-// otherwise page all of it through kGuestRAMSize of frames in SRAM.
+// Hold guest RAM directly in SRAM when it fits. Otherwise page all of it
+// through kGuestRAMSize of frames, or, without the PSRAM or after a fault,
+// cap it at kGuestRAMSize held directly.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
   const uint32_t requested_size = RequestedRAMSize();
   const bool can_page =
@@ -646,8 +648,6 @@ static bool InitVM(void) {
         g_init_status->is_after_fault ? "the last start crashed"
                                       : "PSRAM is not available");
     EmulatorStatusBarPostMessage(message);
-  } else if (g_init_status->is_after_fault) {
-    EmulatorStatusBarPostMessage("Paging off: the last start crashed");
   }
   return true;
 }
