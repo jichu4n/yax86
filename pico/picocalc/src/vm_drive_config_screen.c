@@ -20,10 +20,10 @@
 // A drive's choices.
 typedef enum DriveItem {
   // Left out of the machine: a hard disk. Floppy disk 2 is left out with
-  // the drive type None.
+  // the drive type Disabled.
   kDriveDisabled = 0,
-  // A floppy drive's mechanism type: 360KB, 720KB, 1.2MB or 1.44MB, or None
-  // for floppy disk 2.
+  // A floppy drive's mechanism type: 360KB, 720KB, 1.2MB or 1.44MB, or
+  // Disabled for floppy disk 2.
   kDriveFloppyType,
   // A floppy drive with no disk in it.
   kDriveNone,
@@ -75,7 +75,7 @@ static uint32_t g_found_size;
 
 // The choices the drive offers, and how many: a floppy drive's type first,
 // then the disk in it, with blank floppy choices following the type - and
-// floppy disk 2 left out, with the type None, has only the type; and a hard
+// floppy disk 2 left out, with the type Disabled, has only the type; and a hard
 // disk is there only with an image - with none there is no disk, rather than
 // a drive with nothing in it.
 static const DriveItem* Choices(uint8_t* num_choices) {
@@ -213,7 +213,7 @@ static void ReconcileFloppyTypeChange(void) {
   }
 }
 
-// Back from the drive type choices or the browser: with None chosen, or a
+// Back from the drive type choices or the browser: with Disabled chosen, or a
 // compatible image found, back on the form.
 static ScreenResult OnResume(void) {
   if (g_is_choosing_type) {
@@ -259,7 +259,7 @@ static void OnDraw(DisplayBox* box) {
           type_row, sizeof(type_row), "%-15s %s", "Drive type",
           g_choice->is_present
               ? VMConfigFloppyDriveTypeLabel(g_choice->floppy_type)
-              : "None");
+              : "Disabled");
       items[row] = (BoxItem){type_row, true};
     } else {
       items[row] = kDriveItems[choices[row]];

@@ -617,7 +617,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   Empty, the blank-image sizes that drive type accepts (`New floppy image
   (360KB)`, `(720KB)`, `(1.2MB)` or `(1.44MB)`), and Existing floppy image, an
   image from the browser that fits the drive type. Floppy disk 2 is left out
-  with the drive type None, first on its list, which goes straight back to
+  with the drive type Disabled, first on its list, which goes straight back to
   the form, and its page then has only Drive type: being there is the drive's
   setting, not a disk to put in it, so it is not among the disks. A hard
   disk is Disabled,

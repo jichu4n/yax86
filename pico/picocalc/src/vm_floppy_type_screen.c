@@ -27,11 +27,11 @@ extern const Screen kVMFloppyTypeScreen;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
 // The drive's choice for its mechanism type, and whether it is there at all:
-// NULL for a drive that always is, which has no None row.
+// NULL for a drive that always is, which has no Disabled row.
 static YFDCDriveType* g_chosen;
 static bool* g_is_present;
 
-// The rows before the drive types: None, for a drive that can be left out.
+// The rows before the drive types: Disabled, for a drive that can be left out.
 static uint8_t NumLeadingRows(void) { return g_is_present != NULL ? 1 : 0; }
 
 ScreenResult VMFloppyTypeScreenOpen(YFDCDriveType* chosen, bool* is_present) {
@@ -74,7 +74,7 @@ static void OnDraw(DisplayBox* box) {
   BoxItem items[1 + kNumDriveTypes];
   uint8_t num_items = 0;
   if (g_is_present != NULL) {
-    items[num_items++] = (BoxItem){"None", false};
+    items[num_items++] = (BoxItem){"Disabled", false};
   }
   for (uint8_t i = 0; i < kNumDriveTypes; ++i) {
     items[num_items++] =
