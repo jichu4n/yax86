@@ -96,13 +96,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   floppy drive**: the built-in floppy in drive A, B empty and no hard disk.
   It reaches `A>` in 2,682,182 instructions (and 28,670,442 cycles), the
   bench's 2,659,300 and 22,882 for the BIOS and DOS looking at drive B, which
-  is what says the two run the same machine. A VM's count depends on its
-  images: DOS330, the two MS-DOS 3.30 floppies and a hard disk, takes 2,768,473
-  (and 29,874,747 cycles). On a Pico at 250MHz, off the floppy in flash, it
-  takes 4.72 seconds of processor time without drawing and 4.82 with it - 123%
-  and 121% of a real PC/XT - and 4.89 off the card; at 125MHz, 9.44 with
-  drawing, 61.5% (processor-time figures from before the floppy option ROM was
-  mapped).
+  is what says the two run the same machine (both measured before the floppy
+  ROM was patched to wait with `HLT` - see "fdc" in `core/AGENTS.md` - and not
+  re-measured; the bench's is now 2,348,107). A VM's count depends on its
+  images: DOS330, the two MS-DOS 3.30 floppies and a hard disk, took 2,768,473
+  (and 29,874,747 cycles) before that patch. On a Pico at 250MHz, off the
+  floppy in flash, it takes 4.72 seconds of processor time without drawing
+  and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the card;
+  at 125MHz, 9.44 with drawing, 61.5% (processor-time figures from before the
+  floppy option ROM was mapped).
 - If the count moves and the bench's does not, the runtime has stopped
   running the measured machine. A key pressed during the boot moves it, which
   is why keys queued before the firmware started are dropped. So does a
@@ -112,12 +114,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **These counts are the 128KB machine's**, which a VM with `memory_kb=128`
   runs held directly in SRAM, as a Pico also does without the PSRAM or after a
   crash (on a Pico 2 that fallback is 384KB: 2,682,066 instructions and
-  28,669,969 cycles with no VMs; before the floppy option ROM was mapped,
-  2,352,177 and 27,921,416). With the PSRAM, a VM asking for more than
+  28,669,969 cycles with no VMs before the floppy ROM was patched, not
+  re-measured; before the floppy option ROM was mapped, 2,352,177 and
+  27,921,416). With the PSRAM, a VM asking for more than
   `kPicoGuestSRAMSize` pages all of its memory (see "Paging guest RAM"), the
   BIOS testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
-  2,682,650 and 28,671,005, and the runtime with no VMs at 640KB takes
-  2,683,379 and 28,672,033. On a Pico at 250MHz, DOS330 boots as follows:
+  2,397,216 and 28,668,651, and the runtime with no VMs at 640KB took
+  2,683,379 and 28,672,033 before the floppy ROM was patched (not
+  re-measured). On a Pico at 250MHz, DOS330 boots as follows - only the 640KB
+  CGA row is measured with the patched floppy ROM, and the others are from
+  before it, which took 0.36s longer at 640KB (6.73s, measured in the same
+  session):
 
   | memory | layout | instructions | cycles | processor time | vs a real PC/XT |
   | --- | --- | --- | --- | --- | --- |
@@ -125,7 +132,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   | 256KB | paged (128KB frames) | 2,766,464 | 29,849,070 | 6.37s | 98.1% |
   | 384KB | paged (128KB frames) | 2,768,351 | 29,874,935 | 6.50s | 96.2% |
   | 512KB | paged (128KB frames) | 2,771,811 | 29,874,906 | 6.63s | 94.4% |
-  | 640KB | paged (128KB frames) | 2,772,520 | 29,876,525 | 6.71s | 93.2% |
+  | 640KB | paged (128KB frames) | 2,464,190 | 29,606,119 | 6.37s | 97.4% |
   | 640KB (`video_adapter=mda`) | paged (128KB frames) | 2,746,234 | 29,875,360 | 6.56s | 95.3% |
 
   On a Pico 2 at 250MHz (measured before the floppy option ROM was mapped, not
