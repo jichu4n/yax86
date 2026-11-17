@@ -45,26 +45,47 @@ TEST_F(PlatformFloppyDrivesTest, TwoDrives) {
   EXPECT_EQ(ReportedDrives(), 2);
 }
 
-TEST_F(PlatformFloppyDrivesTest, UnsetDriveTypesDoesNotMapFloppyOptionROM) {
-  Init(2);
+TEST_F(
+    PlatformFloppyDrivesTest,
+    UnsetDriveTypesMapsFloppyOptionROMWithDefault360KBDrive0) {
+  Init(0);
+  EXPECT_EQ(ReportedDrives(), 1);
+  const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM);
+  ASSERT_NE(entry, nullptr);
   EXPECT_EQ(
-      YPlatformGetMemoryMapEntryByType(
-          &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM),
-      nullptr);
+      YPlatformReadMemoryWord(&platform_, Y_FDC_OPTION_ROM_START_ADDRESS),
+      0xAA55);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(
+          &platform_,
+          Y_FDC_OPTION_ROM_START_ADDRESS + Y_FDC_OPTION_ROM_CONFIG_OFFSET + 1),
+      Y_FDC_DRIVE_TYPE_360KB);
+  for (uint32_t drive = 1; drive < Y_FDC_NUM_DRIVES; ++drive) {
+    EXPECT_EQ(
+        YPlatformReadMemoryByte(
+            &platform_, Y_FDC_OPTION_ROM_START_ADDRESS +
+                            Y_FDC_OPTION_ROM_CONFIG_OFFSET + 1 + drive * 4),
+        Y_FDC_DRIVE_TYPE_NONE);
+  }
 }
 
 TEST_F(PlatformFloppyDrivesTest, ConfiguredDriveTypesMapsValidFloppyOptionROM) {
   platform_.config.floppy_drive_types[0] = Y_FDC_DRIVE_TYPE_1440KB;
   platform_.config.floppy_drive_types[1] = Y_FDC_DRIVE_TYPE_1200KB;
-  Init(0);
+  Init(2);
 
   EXPECT_EQ(ReportedDrives(), 2);
   const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
       &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM);
   ASSERT_NE(entry, nullptr);
   EXPECT_EQ(entry->start, (uint32_t)Y_FDC_OPTION_ROM_START_ADDRESS);
+  const YPlatformMemoryMapEntry* config_entry =
+      YPlatformGetMemoryMapEntryByType(
+          &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM_CONFIG);
+  ASSERT_NE(config_entry, nullptr);
   EXPECT_EQ(
-      entry->end,
+      config_entry->end,
       (uint32_t)Y_FDC_OPTION_ROM_START_ADDRESS + YFDCGetOptionROMSize() - 1);
 
   EXPECT_EQ(

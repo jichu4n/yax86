@@ -73,7 +73,9 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
     g_drives[drive].path[0] = '\0';
     g_drives[drive].blank_size =
         drive == kVMDriveHD1 ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : 0;
-    g_drives[drive].floppy_type = Y_FDC_DRIVE_TYPE_NONE;
+    g_drives[drive].floppy_type = drive < kNumVMFloppyDrives
+                                      ? Y_FDC_DRIVE_TYPE_360KB
+                                      : Y_FDC_DRIVE_TYPE_NONE;
     g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
   g_video_adapter = Y_VIDEO_ADAPTER_CGA;

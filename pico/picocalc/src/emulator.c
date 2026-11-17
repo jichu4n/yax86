@@ -618,7 +618,7 @@ static bool InitVM(void) {
   config->num_floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
   for (uint8_t drive = 0; drive < config->num_floppy_drives; ++drive) {
     config->floppy_drive_types[drive] =
-        g_has_vm ? g_vm->floppy_types[drive] : Y_FDC_DRIVE_TYPE_NONE;
+        g_has_vm ? g_vm->floppy_types[drive] : Y_FDC_DRIVE_TYPE_360KB;
   }
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
@@ -1189,7 +1189,7 @@ static __noinline void OpenDrives(void) {
     }
   }
   YFDCDriveType floppy_types[kNumFloppyDrives] = {
-      Y_FDC_DRIVE_TYPE_NONE, Y_FDC_DRIVE_TYPE_NONE};
+      Y_FDC_DRIVE_TYPE_360KB, Y_FDC_DRIVE_TYPE_360KB};
   if (g_has_vm) {
     for (uint8_t floppy = 0; floppy < kNumFloppyDrives; ++floppy) {
       floppy_types[floppy] = g_vm->floppy_types[floppy];

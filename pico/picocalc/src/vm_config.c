@@ -40,13 +40,13 @@ static const char* const kFloppyDriveTypeKeys[kNumVMFloppyDrives] = {
 };
 
 static const char* const kFloppyDriveTypeNames[Y_FDC_NUM_DRIVE_TYPES] = {
-    [Y_FDC_DRIVE_TYPE_NONE] = "",        [Y_FDC_DRIVE_TYPE_360KB] = "360k",
+    [Y_FDC_DRIVE_TYPE_NONE] = "360k",    [Y_FDC_DRIVE_TYPE_360KB] = "360k",
     [Y_FDC_DRIVE_TYPE_720KB] = "720k",   [Y_FDC_DRIVE_TYPE_1200KB] = "1.2m",
     [Y_FDC_DRIVE_TYPE_1440KB] = "1.44m",
 };
 
 static const char* const kFloppyDriveTypeLabels[Y_FDC_NUM_DRIVE_TYPES] = {
-    [Y_FDC_DRIVE_TYPE_NONE] = "Standard", [Y_FDC_DRIVE_TYPE_360KB] = "360KB",
+    [Y_FDC_DRIVE_TYPE_NONE] = "360KB",    [Y_FDC_DRIVE_TYPE_360KB] = "360KB",
     [Y_FDC_DRIVE_TYPE_720KB] = "720KB",   [Y_FDC_DRIVE_TYPE_1200KB] = "1.2MB",
     [Y_FDC_DRIVE_TYPE_1440KB] = "1.44MB",
 };
@@ -63,12 +63,12 @@ static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
 
 const char* VMConfigFloppyDriveTypeName(YFDCDriveType type) {
   return kFloppyDriveTypeNames
-      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_NONE];
+      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
 }
 
 const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type) {
   return kFloppyDriveTypeLabels
-      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_NONE];
+      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
 }
 
 static bool FloppyDriveTypeFromName(const char* name, YFDCDriveType* type) {
@@ -183,7 +183,7 @@ bool VMConfigRead(
     config->is_present[drive] = false;
   }
   for (uint8_t floppy = 0; floppy < kNumVMFloppyDrives; ++floppy) {
-    config->floppy_types[floppy] = Y_FDC_DRIVE_TYPE_NONE;
+    config->floppy_types[floppy] = Y_FDC_DRIVE_TYPE_360KB;
   }
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   VMReading reading = {.config = config};
@@ -229,11 +229,10 @@ bool VMConfigSave(
     settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
   for (uint8_t floppy = 0; floppy < kNumVMFloppyDrives; ++floppy) {
-    const YFDCDriveType type = floppy_types[floppy];
     settings[kNumVMDrives + floppy] = (ConfigFileSetting){
         .key = kFloppyDriveTypeKeys[floppy],
-        .value = drives[floppy] != NULL && type != Y_FDC_DRIVE_TYPE_NONE
-                     ? VMConfigFloppyDriveTypeName(type)
+        .value = drives[floppy] != NULL
+                     ? VMConfigFloppyDriveTypeName(floppy_types[floppy])
                      : NULL,
     };
   }

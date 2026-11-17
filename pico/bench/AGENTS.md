@@ -36,16 +36,16 @@ work" in the root `AGENTS.md` for what a performance PR reports and why.
   | a bare Pico 2 | 384KB held directly in SRAM | `paging=false guest_ram_kb=384` |
 
 - **It is deterministic, with an invariant for each layout, every run, at
-  every level**: paged, 2,353,188 retired instructions and 27,922,137
-  emulated cycles; direct at 128KB (`pico`), 2,328,491 and 27,707,022; direct
-  at 384KB (`pico2`), 2,355,629 and 27,961,371. The BIOS tests and DOS sizes
+  every level**: paged, 2,682,650 retired instructions and 28,671,005
+  emulated cycles; direct at 128KB (`pico`), 2,659,300 and 28,438,501; direct
+  at 384KB (`pico2`), 2,679,188 and 28,637,837. The BIOS tests and DOS sizes
   more memory at larger layouts. If any count moves, behaviour changed and the
   times are not comparable.
 - **After the result come `psram`**, its state, which says why a run did not
   page, **and `paging`**: the pager's counts, which follow from the guest and
   repeat run to run, and `fault_us`, the time spent in the fault handler. At
   640KB the boot zero-fills every page once as the BIOS tests it, 2,560 of
-  them, and writes back 2,573 at 128KB of frames or 1,407 at 384KB.
+  them, and writes back 2,574 at 128KB of frames or 1,407 at 384KB.
 - The floppy is compiled into flash by the ROM generator, generated into the
   build directory rather than committed - at 360KB it is megabytes of C.
   Guest writes are discarded; nothing on the way to the prompt writes.

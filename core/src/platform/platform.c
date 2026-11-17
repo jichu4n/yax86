@@ -618,7 +618,8 @@ Y_FILE_PRIVATE void YPlatformFDCCallbackWritePortByte(
 Y_FILE_PRIVATE uint8_t YPlatformFDCCallbackReadOptionROMByte(
     YPlatformMemoryMapEntry* entry, uint32_t relative_address) {
   return YFDCReadOptionROMByte(
-      (const YFDCState*)entry->context, relative_address);
+      (const YFDCState*)entry->context,
+      Y_PLATFORM_MEMORY_PAGE_SIZE + relative_address);
 }
 
 // ============================================================================
@@ -924,17 +925,12 @@ Y_FILE_PRIVATE void YPlatformInitPIT(YPlatformState* platform) {
 
 Y_FILE_PRIVATE uint8_t
 YPlatformEffectiveNumFloppyDrives(const YPlatformState* platform) {
-  if (platform->config.num_floppy_drives > 0) {
-    return platform->config.num_floppy_drives <= Y_FDC_NUM_DRIVES
-               ? platform->config.num_floppy_drives
-               : Y_FDC_NUM_DRIVES;
+  if (platform->config.num_floppy_drives == 0) {
+    return 1;
   }
-  uint8_t count = 0;
-  while (count < Y_FDC_NUM_DRIVES &&
-         platform->config.floppy_drive_types[count] != Y_FDC_DRIVE_TYPE_NONE) {
-    ++count;
-  }
-  return count > 0 ? count : 1;
+  return platform->config.num_floppy_drives <= Y_FDC_NUM_DRIVES
+             ? platform->config.num_floppy_drives
+             : Y_FDC_NUM_DRIVES;
 }
 
 Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
@@ -983,32 +979,34 @@ Y_FILE_PRIVATE void YPlatformInitFDC(YPlatformState* platform) {
   platform->fdc.config.read_image_byte = NULL;
   platform->fdc.config.write_image_byte = NULL;
   const uint8_t num_drives = YPlatformEffectiveNumFloppyDrives(platform);
-  bool has_typed_drive = false;
-  for (uint8_t i = 0; i < num_drives; ++i) {
-    if (platform->config.floppy_drive_types[i] != Y_FDC_DRIVE_TYPE_NONE) {
-      has_typed_drive = true;
-    }
-  }
   for (uint8_t i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
-    YFDCDriveType type = i < num_drives ? platform->config.floppy_drive_types[i]
-                                        : Y_FDC_DRIVE_TYPE_NONE;
-    if (has_typed_drive && i < num_drives && type == Y_FDC_DRIVE_TYPE_NONE) {
-      type = Y_FDC_DRIVE_TYPE_360KB;
+    YFDCDriveType type = Y_FDC_DRIVE_TYPE_NONE;
+    if (i < num_drives) {
+      type = platform->config.floppy_drive_types[i];
+      if (type == Y_FDC_DRIVE_TYPE_NONE) {
+        type = Y_FDC_DRIVE_TYPE_360KB;
+      }
     }
     platform->fdc.config.drive_types[i] = type;
   }
   YFDCInit(&platform->fdc);
-  if (has_typed_drive) {
-    const uint32_t option_rom_size = YFDCGetOptionROMSize();
-    YPlatformMemoryMapEntry option_rom_entry = {
-        .context = &platform->fdc,
-        .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM,
-        .start = Y_FDC_OPTION_ROM_START_ADDRESS,
-        .end = Y_FDC_OPTION_ROM_START_ADDRESS + option_rom_size - 1,
-        .read_byte_fn = YPlatformFDCCallbackReadOptionROMByte,
-    };
-    YPlatformRegisterMemoryMapEntry(platform, &option_rom_entry);
-  }
+  const uint32_t option_rom_size = YFDCGetOptionROMSize();
+  YPlatformMemoryMapEntry option_rom_entry = {
+      .context = NULL,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM,
+      .start = Y_FDC_OPTION_ROM_START_ADDRESS,
+      .end = Y_FDC_OPTION_ROM_START_ADDRESS + Y_PLATFORM_MEMORY_PAGE_SIZE - 1,
+      .read_data = YFDCGetOptionROMData(),
+  };
+  YPlatformRegisterMemoryMapEntry(platform, &option_rom_entry);
+  YPlatformMemoryMapEntry option_rom_config_entry = {
+      .context = &platform->fdc,
+      .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM_CONFIG,
+      .start = Y_FDC_OPTION_ROM_START_ADDRESS + Y_PLATFORM_MEMORY_PAGE_SIZE,
+      .end = Y_FDC_OPTION_ROM_START_ADDRESS + option_rom_size - 1,
+      .read_byte_fn = YPlatformFDCCallbackReadOptionROMByte,
+  };
+  YPlatformRegisterMemoryMapEntry(platform, &option_rom_config_entry);
   YPlatformPortMapEntry fdc_entry = {
       .entry_type = (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_FDC,
       .start = 0x3F0,

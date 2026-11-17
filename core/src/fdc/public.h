@@ -163,8 +163,8 @@ Y_PUBLIC_HEADER inline const YFDCDiskFormat* YFDCFindFormat(
 // Type of a floppy drive mechanism. Values 1 to 4 match the PC/AT CMOS and
 // Multi-Floppy BIOS Extension drive type codes.
 typedef enum YFDCDriveType {
-  // No drive type configured (or drive absent in the option ROM): the stock XT
-  // double-density drive, accepting 360KB and 720KB disks at 250kbps.
+  // Drive not configured (defaults to a 360KB drive for controller operations,
+  // and marks a drive absent in the Multi-Floppy BIOS configuration block).
   Y_FDC_DRIVE_TYPE_NONE = 0,
   // 5.25" 360KB double-density drive (40 tracks).
   Y_FDC_DRIVE_TYPE_360KB = 1,
@@ -178,7 +178,8 @@ typedef enum YFDCDriveType {
   Y_FDC_NUM_DRIVE_TYPES = 5,
 } YFDCDriveType;
 
-// Returns whether a drive of drive_type accepts a disk of format.
+// Returns whether a drive of drive_type accepts a disk of format. An
+// unconfigured drive (Y_FDC_DRIVE_TYPE_NONE) defaults to a 360KB drive.
 Y_PUBLIC_HEADER inline bool YFDCDoesDriveTypeSupportFormat(
     YFDCDriveType drive_type, const YFDCDiskFormat* format) {
   if (format == NULL) {
@@ -187,8 +188,6 @@ Y_PUBLIC_HEADER inline bool YFDCDoesDriveTypeSupportFormat(
   const uint32_t size = YFDCFormatImageSize(format);
   switch (drive_type) {
     case Y_FDC_DRIVE_TYPE_NONE:
-      return size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ||
-             size == Y_FDC_FORMAT_720KB_IMAGE_SIZE;
     case Y_FDC_DRIVE_TYPE_360KB:
       return size == Y_FDC_FORMAT_360KB_IMAGE_SIZE;
     case Y_FDC_DRIVE_TYPE_720KB:
@@ -399,9 +398,9 @@ typedef struct YFDCConfig {
   // Logger for this module. May be NULL.
   YLogger* logger;
 
-  // Type of each drive's mechanism. Y_FDC_DRIVE_TYPE_NONE (0), the default, is
-  // a stock XT double-density drive accepting 360KB and 720KB disks at
-  // 250kbps.
+  // Type of each drive's mechanism. Y_FDC_DRIVE_TYPE_NONE (0), the default,
+  // marks the drive absent in the Multi-Floppy BIOS configuration block and
+  // defaults to a 360KB drive for controller operations.
   YFDCDriveType drive_types[Y_FDC_NUM_DRIVES];
 
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.

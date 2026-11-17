@@ -47,7 +47,9 @@ void FloppyOpen(
     DiskImageStatus opened[kNumFloppyDrives]) {
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     DiskImage* image = &g_images[drive];
-    g_drive_types[drive] = drive_types[drive];
+    g_drive_types[drive] = drive_types[drive] != Y_FDC_DRIVE_TYPE_NONE
+                               ? drive_types[drive]
+                               : Y_FDC_DRIVE_TYPE_360KB;
     g_formats[drive] = NULL;
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;

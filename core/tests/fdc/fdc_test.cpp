@@ -837,6 +837,7 @@ TEST_F(FDCTest, FindFormatReturnsFormatForKnownSizesOnly) {
 }
 
 TEST_F(FDCTest, ReadData720KBLastSector) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_720KB;
   YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
   dma_mode_ = kDmaModeRead;
 
@@ -867,6 +868,7 @@ TEST_F(FDCTest, ReadData720KBLastSector) {
 }
 
 TEST_F(FDCTest, WriteData720KBCylinder79) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_720KB;
   YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
   dma_mode_ = kDmaModeWrite;
 
@@ -895,6 +897,7 @@ TEST_F(FDCTest, WriteData720KBCylinder79) {
 }
 
 TEST_F(FDCTest, FormatTrack720KBCylinder79) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_720KB;
   YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
   SeekDrive0(79);
   dma_mode_ = kDmaModeWrite;
@@ -921,6 +924,7 @@ TEST_F(FDCTest, FormatTrack720KBCylinder79) {
 }
 
 TEST_F(FDCTest, ReadData720KBRejectsCylinder80WithNoData) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_720KB;
   YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
   dma_mode_ = kDmaModeRead;
 
@@ -937,6 +941,8 @@ TEST_F(FDCTest, ReadData720KBRejectsCylinder80WithNoData) {
 
 TEST_F(FDCTest, FormatIsPerDrive360KBStillRejectsCylinder40) {
   // Drive 0 holds 720KB and Drive 1 holds 360KB.
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_720KB;
+  fdc_.config.drive_types[1] = Y_FDC_DRIVE_TYPE_360KB;
   YFDCInsertDisk(&fdc_, 0, &YFDCFormat720KB);
   YFDCInsertDisk(&fdc_, 1, &YFDCFormat360KB);
   dma_mode_ = kDmaModeRead;
@@ -1042,6 +1048,8 @@ TEST_F(FDCTest, DriveTypeSupportsFormatAndDataRateTable) {
     YFDCDataRate required_rate;
   };
   const Case cases[] = {
+      {Y_FDC_DRIVE_TYPE_NONE, &YFDCFormat360KB, true, Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_NONE, &YFDCFormat720KB, false, Y_FDC_DATA_RATE_250KBPS},
       {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat360KB, true, Y_FDC_DATA_RATE_250KBPS},
       {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat720KB, false,
        Y_FDC_DATA_RATE_250KBPS},

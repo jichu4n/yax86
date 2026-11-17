@@ -1,5 +1,5 @@
-// A floppy drive's mechanism type, from a drive's configuration: Standard
-// (360KB/720KB), 360KB, 720KB, 1.2MB or 1.44MB.
+// A floppy drive's mechanism type, from a drive's configuration: 360KB,
+// 720KB, 1.2MB or 1.44MB.
 #ifndef YAX86_PICOCALC_VM_FLOPPY_TYPE_SCREEN_H
 #define YAX86_PICOCALC_VM_FLOPPY_TYPE_SCREEN_H
 

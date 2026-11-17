@@ -199,7 +199,8 @@ round-trips through memory costs more than its instruction count suggests.**
   compiled sieve 4.8%. Below 512 bytes more instructions cross into the next
   page, which are never cached, and the share rises again: 26.5% for QBasic
   at 256 bytes. `dos-boot` gained 0.76% paged and 0.79% direct, and moved
-  to 2,353,188 and 27,922,137 paged and 2,328,491 and 27,707,022 direct; with
+  to 2,353,188 and 27,922,137 paged and 2,328,491 and 27,707,022 direct
+  (measured before the floppy option ROM was mapped); with
   `Y_CPU_MAX_INSTRUCTIONS_PER_TICK` at 1 both sides give the counts above.
 - **Not caching is as load-bearing as caching**: an instruction that spills
   onto the next page or off the end of the segment is not cached, since its

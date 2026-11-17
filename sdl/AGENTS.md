@@ -21,11 +21,12 @@ An SDL3 runtime for the emulator, built natively and through Emscripten as
   from `YFDCFindFormat()`, and `--fd-type 360k|720k|1.2m|1.44m` to set drive
   0's mechanism type (`YPlatformConfig.floppy_drive_types[0]`, checked against
   the image with `YFDCDoesDriveTypeSupportFormat()`); without `--fd-type` the
-  drive is the unconfigured stock XT drive, and the browser build's packaged
-  boot floppy remains 360KB. **A 10MB hard disk is attached by default** -
-  blank unless `--hdd <image>` names one, to be partitioned and formatted from
-  DOS - and `--no-hdd` leaves it out. The default matters because the browser
-  build has no command line.
+  drive is a `360KB` drive (`Y_FDC_DRIVE_TYPE_360KB`, so a 720KB image needs
+  `--fd-type 720k`), and the browser build's packaged boot floppy remains
+  360KB. **A 10MB hard disk is attached by default** - blank unless
+  `--hdd <image>` names one, to be partitioned and formatted from DOS - and
+  `--no-hdd` leaves it out. The default matters because the browser build has
+  no command line.
 - `--cga` or `--mda`, default CGA, through `YPlatformConfig.video_adapter`
   before `YPlatformInit()`. It decides what the platform registers and what
   the PPI's DIP switches report, which the BIOS reads.

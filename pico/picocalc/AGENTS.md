@@ -94,13 +94,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 - **With no VMs on the card, the machine is the bench's with a second
   floppy drive**: the built-in floppy in drive A, B empty and no hard disk.
-  It reaches `A>` in 2,328,997 instructions, the bench's 2,328,491 and 506
-  for the BIOS and DOS looking at drive B, which is what says the two run
-  the same machine. A VM's count depends on its images: DOS330, the two
-  MS-DOS 3.30 floppies and a hard disk, takes 2,416,289. On a Pico at 250MHz,
-  off the floppy in flash, it takes 4.72 seconds of processor time without
-  drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
-  card; at 125MHz, 9.44 with drawing, 61.5%.
+  It reaches `A>` in 2,682,182 instructions (and 28,670,442 cycles), the
+  bench's 2,659,300 and 22,882 for the BIOS and DOS looking at drive B, which
+  is what says the two run the same machine. A VM's count depends on its
+  images: DOS330, the two MS-DOS 3.30 floppies and a hard disk, takes 2,768,473
+  (and 29,874,747 cycles). On a Pico at 250MHz, off the floppy in flash, it
+  takes 4.72 seconds of processor time without drawing and 4.82 with it - 123%
+  and 121% of a real PC/XT - and 4.89 off the card; at 125MHz, 9.44 with
+  drawing, 61.5% (processor-time figures from before the floppy option ROM was
+  mapped).
 - If the count moves and the bench's does not, the runtime has stopped
   running the measured machine. A key pressed during the boot moves it, which
   is why keys queued before the firmware started are dropped. So does a
@@ -110,14 +112,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **These counts are the 128KB machine's**, which a Pico runs without the
   PSRAM or after a crash (on a Pico 2 that fallback is 384KB: 2,352,177
   instructions and 27,921,416 cycles with no VMs, 2,441,987 and 29,158,902 on
-  DOS330). With the PSRAM both boards page 640KB (see "Paging guest RAM"), and
-  DOS330 boots in 2,440,643 instructions and 29,132,076 cycles, or 2,412,600
-  and 29,114,560 with `video_adapter=mda`, the BIOS testing and DOS sizing
-  more memory; the bench's 640KB `dos-boot` takes 2,353,188 and 27,922,137. On
-  a Pico 2 at 250MHz with 384KB of SRAM frames, DOS330 at 640KB takes 3.83
-  seconds of processor time with drawing and 3.81 without - 159% and 160% of a
-  real PC/XT - and 3.74 with `video_adapter=mda`. The runtime with no VMs has
-  not been counted at 640KB.
+  DOS330, not re-measured with the floppy option ROM). With the PSRAM both
+  boards page 640KB (see "Paging guest RAM"), and DOS330 boots in 2,772,520
+  instructions and 29,876,525 cycles, or 2,746,234 and 29,875,360 with
+  `video_adapter=mda`, the BIOS testing and DOS sizing more memory; the bench's
+  640KB `dos-boot` takes 2,682,650 and 28,671,005, and the runtime with no VMs
+  at 640KB takes 2,683,379 and 28,672,033. On a Pico 2 at 250MHz with 384KB of
+  SRAM frames, DOS330 at 640KB takes 3.83 seconds of processor time with
+  drawing and 3.81 without - 159% and 160% of a real PC/XT - and 3.74 with
+  `video_adapter=mda` (not re-measured with the floppy option ROM).
 
 ## Running in real time
 
@@ -361,16 +364,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
   `fd1` and `fd2` are 360KB, 720KB, 1.2MB or 1.44MB floppies, their format
   taken from the image's size and checked against `fd1_type` and `fd2_type`
-  (`360k`, `720k`, `1.2m` or `1.44m`; when not named, `Y_FDC_DRIVE_TYPE_NONE`,
-  the standard drive taking 360KB and 720KB without mapping the Multi-Floppy
-  BIOS option ROM), `hd1` and `hd2` the hard disk controller's master and slave,
-  each the core's 10MB drive, and `video_adapter` is `cga` or `mda`, `cga`
-  without it. Without a VM, the built-in 360KB floppy runs with the CGA. A key
-  `vm.cfg` has that this firmware does not know is logged as
-  `vm_config_key_ignored` on each read, with the file's path and the key, and
-  skipped, so a file written by a later firmware still reads and a Configure
-  save keeps the line; a bad value or path is logged as `vm_config_problem`.
-  Loading a VM logs `vm_loaded` with its `path` and `video_adapter`.
+  (`360k`, `720k`, `1.2m` or `1.44m`, `360k` without it, so an existing VM with
+  a 720KB image and no `fdN_type` fails to open with `"wrong disk type for
+  drive"` until `Drive type` is set to `720KB`), `hd1` and `hd2` the hard disk
+  controller's master and slave, each the core's 10MB drive, and
+  `video_adapter` is `cga` or `mda`, `cga` without it. Without a VM, the
+  built-in 360KB floppy runs with the CGA. A key `vm.cfg` has that this
+  firmware does not know is logged as `vm_config_key_ignored` on each read,
+  with the file's path and the key, and skipped, so a file written by a later
+  firmware still reads and a Configure save keeps the line; a bad value or path
+  is logged as `vm_config_problem`. Loading a VM logs `vm_loaded` with its
+  `path` and `video_adapter`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -582,23 +586,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   floppy disks 1 and 2, hard disks 1 and 2, Video adapter - `CGA` or `MDA`,
   on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Each
   floppy drive's page (`src/vm_drive_config_screen.c`) has Drive type
-  (`Standard (360KB/720KB)`, `360KB`, `720KB`, `1.2MB` or `1.44MB`, on
-  `src/vm_floppy_type_screen.c`), Empty, the blank-image sizes that drive type
-  accepts (`New floppy image (360KB)`, `(720KB)`, `(1.2MB)` or `(1.44MB)`), and
-  Existing floppy image, an image from the browser that fits the drive type
-  (floppy disk 2 has Disabled first); a hard disk is Disabled, New disk image
-  (10MB), or Existing disk image, a 10MB one. A new VM starts with floppy disk
-  1 empty (`Standard`), floppy disk 2 and hard disk 2 disabled, a new disk
-  image as hard disk 1, and `CGA`. An existing image is shared, like any image
-  outside the VM's folder. A floppy drive with no disk is "empty" wherever the
-  menu says what a drive holds, as the status rows have it. Backspace on the
-  form only ever erases the name - Esc leaves it - so that a press meant for
-  the name does not throw the form away. One image in two drives is refused
-  before anything is written. Create writes `vm.cfg` with the drives there, as
-  paths relative to it, `fd1_type` and `fd2_type` for the floppy drives given a
-  specific mechanism type, and `video_adapter`, always written as `cga` or
-  `mda`, in one `ConfigFileUpdate()` through `VMConfigSave()`, which removes
-  the line of a drive left out and a line left with nothing else on it.
+  (`360KB`, `720KB`, `1.2MB` or `1.44MB`, on `src/vm_floppy_type_screen.c`),
+  Empty, the blank-image sizes that drive type accepts (`New floppy image
+  (360KB)`, `(720KB)`, `(1.2MB)` or `(1.44MB)`), and Existing floppy image, an
+  image from the browser that fits the drive type (floppy disk 2 has Disabled
+  first); a hard disk is Disabled, New disk image (10MB), or Existing disk
+  image, a 10MB one. A new VM starts with floppy disk 1 empty (`360KB`), floppy
+  disk 2 and hard disk 2 disabled, a new disk image as hard disk 1, and `CGA`.
+  An existing image is shared, like any image outside the VM's folder. A floppy
+  drive with no disk is "empty" wherever the menu says what a drive holds, as
+  the status rows have it. Backspace on the form only ever erases the name -
+  Esc leaves it - so that a press meant for the name does not throw the form
+  away. One image in two drives is refused before anything is written. Create
+  writes `vm.cfg` with the drives there, as paths relative to it, `fd1_type`
+  and `fd2_type` for each present floppy drive, and `video_adapter`, always
+  written as `cga` or `mda`, in one `ConfigFileUpdate()` through
+  `VMConfigSave()`, which removes the line of a drive left out and a line left
+  with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
   for both, starting from its drives and video adapter as its `vm.cfg` has
   them, with no name and Save for Create. Save writes the four drives, the
@@ -922,7 +926,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **The status page's lines are the emulator's**: it fills them in on
   every pass while the menu shows, and the status screen draws them every
   second. `Display` starts with the adapter, `CGA` or `MDA`, and `Disk` shows
-  each floppy drive's type alongside its label (`FD1 (Standard):`,
+  each floppy drive's type alongside its label (`FD1 (360KB):`,
   `FD2 (1.44MB):`). Filling them in costs nothing that matters while the VM is
   paused.
 - **A list box is a box that lists items, one of them selected**: most

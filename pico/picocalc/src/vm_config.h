@@ -18,9 +18,9 @@
 // a drive with no disk. A hard disk not named, or named as "", is not there:
 // a hard disk with no image is no disk at all. Floppy images are 360KB,
 // 720KB, 1.2MB or 1.44MB, checked against fd1_type and fd2_type (360k, 720k,
-// 1.2m or 1.44m, and the standard drive taking 360KB and 720KB when not
-// named), and hard disk images the core's 10MB drive. video_adapter is cga or
-// mda, and cga when not named. Keys this firmware does not know are skipped.
+// 1.2m or 1.44m, and 360k when not named), and hard disk images the core's
+// 10MB drive. video_adapter is cga or mda, and cga when not named. Keys this
+// firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -74,16 +74,16 @@ typedef struct VMConfig {
   // Whether the file names each drive, even as empty. Floppy disk 2 is there
   // only if it does; a hard disk not named is empty either way.
   bool is_present[kNumVMDrives];
-  // Each floppy drive's mechanism type, or Y_FDC_DRIVE_TYPE_NONE when not
-  // named in the file.
+  // Each floppy drive's mechanism type: Y_FDC_DRIVE_TYPE_360KB when not named
+  // in the file.
   YFDCDriveType floppy_types[kNumVMFloppyDrives];
   // The VM's video adapter: Y_VIDEO_ADAPTER_CGA when not named.
   YVideoAdapter video_adapter;
 } VMConfig;
 
 // A floppy drive type's name in vm.cfg and the report (360k, 720k, 1.2m,
-// 1.44m, or empty for Y_FDC_DRIVE_TYPE_NONE), and its label in the menu and on
-// the status page (Standard, 360KB, 720KB, 1.2MB, 1.44MB).
+// 1.44m), and its label in the menu and on the status page (360KB, 720KB,
+// 1.2MB, 1.44MB).
 const char* VMConfigFloppyDriveTypeName(YFDCDriveType type);
 const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type);
 
@@ -106,10 +106,10 @@ bool VMConfigRead(
 // Write a VM's configuration to its file, as VMConfigSaveDrive() writes one
 // drive, making the file if there is none. Each drive is a path from the
 // card's root, empty for none, or NULL for a drive not there, whose line is
-// removed; each present floppy drive's type is written when set; and
-// video_adapter is always written, as cga or mda. Returns false, with the
-// problem described, if a path would be too long or the file could not be
-// written.
+// removed; each present floppy drive's type is written (as 360k, 720k, 1.2m or
+// 1.44m, and removed when floppy disk 2 is not there); and video_adapter is
+// always written, as cga or mda. Returns false, with the problem described, if
+// a path would be too long or the file could not be written.
 bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
     const YFDCDriveType floppy_types[kNumVMFloppyDrives],
