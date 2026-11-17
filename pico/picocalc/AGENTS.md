@@ -613,10 +613,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
   hard disks 1 and 2, and Create. Each floppy drive's page
   (`src/vm_drive_config_screen.c`) has Drive type (`360KB`, `720KB`, `1.2MB` or
-  `1.44MB`, on `src/vm_floppy_type_screen.c`), Empty, the blank-image sizes
-  that drive type accepts (`New floppy image (360KB)`, `(720KB)`, `(1.2MB)` or
-  `(1.44MB)`), and Existing floppy image, an image from the browser that fits
-  the drive type (floppy disk 2 has Disabled first); a hard disk is Disabled,
+  `1.44MB`, on `src/vm_floppy_type_screen.c`), then the disk in the drive:
+  Empty, the blank-image sizes that drive type accepts (`New floppy image
+  (360KB)`, `(720KB)`, `(1.2MB)` or `(1.44MB)`), and Existing floppy image, an
+  image from the browser that fits the drive type. Floppy disk 2 is left out
+  with the drive type None, first on its list, which goes straight back to
+  the form, and its page then has only Drive type: being there is the drive's
+  setting, not a disk to put in it, so it is not among the disks. A hard
+  disk is Disabled,
   New disk image (10MB), or Existing disk image, a 10MB one. A new VM starts
   with `640K`, `CGA`, floppy disk 1 empty (`360KB`), floppy disk 2 and hard
   disk 2 disabled, and a new disk image as hard disk 1. An existing image is
@@ -934,8 +938,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   its drive is in use, and composing is skipped while nothing they show has
   changed. Composing every time cost the boot 0.74% against master; skipping
   it, 0.42%, within 0.06% of composing once a second.
-- The status page in the menu has the six lines of figures the panel used
-  to show at all times.
+- The status page in the menu has the lines of figures the panel used to
+  show at all times, with the drives split over two of them.
 
 ## The menu
 
@@ -958,10 +962,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
 - **The status page's lines are the emulator's**: it fills them in on
   every pass while the menu shows, and the status screen draws them every
-  second. `Display` starts with the adapter, `CGA` or `MDA`, and `Disk` shows
-  a floppy drive's type alongside its label when it is not `360KB`
-  (`FD1:`, `FD2 (1.44MB):`). Filling them in costs nothing that matters while
-  the VM is paused.
+  second. `Display` starts with the adapter, `CGA` or `MDA`. `Floppy` has
+  each floppy drive with its type and the sectors it has read and written
+  (`FD1 360KB: 120r 0w  FD2 1.44MB: 5931r 3018w`), and `Hard disk` the hard
+  disks the same way, then the time all the drives have spent on the card
+  (`HD1: 812r 34w  card 0.412s`). Words in place of `r` and `w`, or the
+  drives on one line, run past the box's right edge with two drives busy.
+  Filling them in costs nothing that matters while the VM is paused.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A

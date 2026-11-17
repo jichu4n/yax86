@@ -375,9 +375,9 @@ static size_t Filled(int written, size_t size) {
   return (size_t)written < size ? (size_t)written : size - 1;
 }
 
-// One drive's part of the Disk line: what it has read and written from its
-// image on the card, or what it has instead and why. Returns how much of
-// buffer it filled.
+// One drive's part of the Floppy or Hard disk line: the sectors it has read
+// and written from its image on the card, or what it has instead and why.
+// Returns how much of buffer it filled.
 static size_t FormatDrive(
     char* buffer, size_t size, const char* drive, const DiskImage* image,
     const char* instead) {
@@ -390,35 +390,30 @@ static size_t FormatDrive(
   }
   return Filled(
       snprintf(
-          buffer, size, "%s %lu read, %lu written  ", drive,
+          buffer, size, "%s %lur %luw  ", drive,
           (unsigned long)image->stats.num_sector_reads,
           (unsigned long)image->stats.num_sector_writes),
       size);
 }
 
-static void FormatDiskLine(char* buffer, size_t size) {
-  const DiskImage* const images[kNumVMDrives] = {
-      [kVMDriveFD1] = FloppyGetImage(kFloppyDriveA),
-      [kVMDriveFD2] = FloppyGetImage(kFloppyDriveB),
-      [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
-      [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
-  };
+// Fill in the drives from first to last, one of kVMDrive*, of a line: those
+// with an image open, or one configured that did not open. Returns how much
+// of buffer it filled.
+static size_t FormatDrives(
+    char* buffer, size_t size, const DiskImage* const images[kNumVMDrives],
+    uint8_t first, uint8_t last) {
   size_t length = 0;
-  uint64_t card_us = 0;
-  bool is_any_open = false;
-  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
+  for (uint8_t drive = first; drive <= last; ++drive) {
     const DiskImage* image = images[drive];
     char label[16];
-    if (drive < kNumVMFloppyDrives &&
-        FloppyGetDriveType((FloppyDrive)drive) != Y_FDC_DRIVE_TYPE_360KB) {
+    if (drive < kNumVMFloppyDrives) {
       snprintf(
-          label, sizeof(label), "%s (%s):", kVMDriveLabels[drive],
+          label, sizeof(label), "%s %s:", kVMDriveLabels[drive],
           VMConfigFloppyDriveTypeLabel(FloppyGetDriveType((FloppyDrive)drive)));
     } else {
       snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
     }
     if (image->status == kDiskImageOpen) {
-      is_any_open = true;
       length += FormatDrive(buffer + length, size - length, label, image, "");
     } else if (image->status != kDiskImageEjected) {
       // What drive A has instead, or why a configured image did not open.
@@ -426,14 +421,38 @@ static void FormatDiskLine(char* buffer, size_t size) {
           buffer + length, size - length, label, image,
           drive == kVMDriveFD1 && !g_has_vm ? "built in" : "empty");
     }
-    card_us += image->stats.read_us + image->stats.write_us;
+  }
+  return length;
+}
+
+// Fill in the Floppy and Hard disk lines: each drive's sectors read and
+// written, and at the end of the Hard disk line, the time all of them have
+// spent on the card.
+static void FormatDiskLines(char* floppy, char* hard_disk, size_t size) {
+  const DiskImage* const images[kNumVMDrives] = {
+      [kVMDriveFD1] = FloppyGetImage(kFloppyDriveA),
+      [kVMDriveFD2] = FloppyGetImage(kFloppyDriveB),
+      [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
+      [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
+  };
+  FormatDrives(floppy, size, images, kVMDriveFD1, kVMDriveFD2);
+  size_t length =
+      FormatDrives(hard_disk, size, images, kVMDriveHD1, kVMDriveHD2);
+  uint64_t card_us = 0;
+  bool is_any_open = false;
+  for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
+    is_any_open = is_any_open || images[drive]->status == kDiskImageOpen;
+    card_us += images[drive]->stats.read_us + images[drive]->stats.write_us;
   }
   if (!is_any_open) {
     return;
   }
+  if (length == 0) {
+    length = Filled(snprintf(hard_disk, size, "none  "), size);
+  }
   const uint64_t card_ms = card_us / kMicrosecondsPerMillisecond;
   snprintf(
-      buffer + length, size - length, "%llu.%03llus",
+      hard_disk + length, size - length, "card %llu.%03llus",
       (unsigned long long)(card_ms / kMillisecondsPerSecond),
       (unsigned long long)(card_ms % kMillisecondsPerSecond));
 }
@@ -442,7 +461,7 @@ static void FormatDiskLine(char* buffer, size_t size) {
 // the VM has cost so far.
 static void DescribeStatus(StatusScreenLine lines[kStatusScreenNumLines]) {
   static const char* const kLabels[kStatusScreenNumLines] = {
-      "System", "Boot", "Speed", "Clock", "Display", "Disk",
+      "System", "Boot", "Speed", "Clock", "Display", "Floppy", "Hard disk",
   };
   for (uint8_t i = 0; i < kStatusScreenNumLines; ++i) {
     lines[i].label = kLabels[i];
@@ -453,7 +472,7 @@ static void DescribeStatus(StatusScreenLine lines[kStatusScreenNumLines]) {
   FormatSpeedLine(lines[2].value, size);
   FormatClockLine(lines[3].value, size);
   FormatDisplayLine(lines[4].value, size);
-  FormatDiskLine(lines[5].value, size);
+  FormatDiskLines(lines[5].value, lines[6].value, size);
 }
 
 // Say once that the battery is low, until it has charged back up.

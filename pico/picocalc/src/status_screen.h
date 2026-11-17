@@ -12,7 +12,7 @@
 
 enum {
   // The lines on the page, and the longest value one can have.
-  kStatusScreenNumLines = 6,
+  kStatusScreenNumLines = 7,
   kStatusScreenValueColumns = 68,
 };
 

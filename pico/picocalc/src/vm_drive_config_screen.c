@@ -19,9 +19,11 @@
 
 // A drive's choices.
 typedef enum DriveItem {
-  // Left out of the machine: floppy disk 2, or a hard disk.
+  // Left out of the machine: a hard disk. Floppy disk 2 is left out with
+  // the drive type None.
   kDriveDisabled = 0,
-  // A floppy drive's mechanism type: 360KB, 720KB, 1.2MB or 1.44MB.
+  // A floppy drive's mechanism type: 360KB, 720KB, 1.2MB or 1.44MB, or None
+  // for floppy disk 2.
   kDriveFloppyType,
   // A floppy drive with no disk in it.
   kDriveNone,
@@ -67,15 +69,15 @@ static uint8_t g_drive;
 static VMDriveChoice* g_choice;
 // Whether the screen opened over this one is the drive type choice.
 static bool g_is_choosing_type;
-static YFDCDriveType g_type_before;
 // The image found in the browser, empty for none, and its size.
 static char g_found_path[kFSMaxPath + 1];
 static uint32_t g_found_size;
 
-// The choices the drive offers, and how many: floppy disk 1 is always there;
-// floppy disk 2 can be left out too; blank floppy choices follow the drive's
-// type; and a hard disk is there only with an image - with none there is no
-// disk, rather than a drive with nothing in it.
+// The choices the drive offers, and how many: a floppy drive's type first,
+// then the disk in it, with blank floppy choices following the type - and
+// floppy disk 2 left out, with the type None, has only the type; and a hard
+// disk is there only with an image - with none there is no disk, rather than
+// a drive with nothing in it.
 static const DriveItem* Choices(uint8_t* num_choices) {
   if (g_drive >= kVMDriveHD1) {
     *num_choices = sizeof(kHardDiskChoices) / sizeof(kHardDiskChoices[0]);
@@ -83,10 +85,11 @@ static const DriveItem* Choices(uint8_t* num_choices) {
   }
   static DriveItem floppy_choices[kNumDriveItems];
   uint8_t count = 0;
-  if (g_drive == kVMDriveFD2) {
-    floppy_choices[count++] = kDriveDisabled;
-  }
   floppy_choices[count++] = kDriveFloppyType;
+  if (!g_choice->is_present) {
+    *num_choices = count;
+    return floppy_choices;
+  }
   floppy_choices[count++] = kDriveNone;
   for (uint8_t i = 0; i < Y_FDC_NUM_FORMATS; ++i) {
     if (YFDCDoesDriveTypeSupportFormat(g_choice->floppy_type, YFDCFormats[i])) {
@@ -133,7 +136,7 @@ ScreenResult VMDriveConfigScreenOpen(uint8_t drive, VMDriveChoice* selected) {
   g_is_choosing_type = false;
   DriveItem item = kDriveNone;
   if (!selected->is_present) {
-    item = kDriveDisabled;
+    item = drive >= kVMDriveHD1 ? kDriveDisabled : kDriveFloppyType;
   } else if (selected->blank_size == Y_FDC_FORMAT_360KB_IMAGE_SIZE) {
     item = kDriveBlank360KB;
   } else if (selected->blank_size == Y_FDC_FORMAT_720KB_IMAGE_SIZE) {
@@ -159,8 +162,9 @@ static ScreenResult OnSelect(void) {
   const DriveItem choice = Choices(&num_choices)[g_list_box.selected];
   if (choice == kDriveFloppyType) {
     g_is_choosing_type = true;
-    g_type_before = g_choice->floppy_type;
-    return VMFloppyTypeScreenOpen(&g_choice->floppy_type);
+    return VMFloppyTypeScreenOpen(
+        &g_choice->floppy_type,
+        g_drive == kVMDriveFD2 ? &g_choice->is_present : NULL);
   }
   if (choice == kDriveFloppyImage || choice == kDriveHardDiskImage) {
     char folder[kFSMaxPath + 1];
@@ -194,9 +198,6 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // Drop any blank or existing floppy image on g_choice that the new drive type
 // does not accept.
 static void ReconcileFloppyTypeChange(void) {
-  if (g_choice->floppy_type != g_type_before) {
-    g_choice->is_present = true;
-  }
   if (g_choice->blank_size != 0 &&
       !YFDCDoesDriveTypeSupportFormat(
           g_choice->floppy_type, YFDCFindFormat(g_choice->blank_size))) {
@@ -212,11 +213,16 @@ static void ReconcileFloppyTypeChange(void) {
   }
 }
 
-// Back from the drive type choices or the browser: with a compatible image
-// found, it is the drive's, back on the form.
+// Back from the drive type choices or the browser: with None chosen, or a
+// compatible image found, back on the form.
 static ScreenResult OnResume(void) {
   if (g_is_choosing_type) {
     g_is_choosing_type = false;
+    if (!g_choice->is_present) {
+      g_choice->path[0] = '\0';
+      g_choice->blank_size = 0;
+      return ScreenBack();
+    }
     ReconcileFloppyTypeChange();
     g_list_box.is_dirty = true;
     return ScreenStays();
@@ -251,7 +257,9 @@ static void OnDraw(DisplayBox* box) {
     if (choices[row] == kDriveFloppyType) {
       snprintf(
           type_row, sizeof(type_row), "%-15s %s", "Drive type",
-          VMConfigFloppyDriveTypeLabel(g_choice->floppy_type));
+          g_choice->is_present
+              ? VMConfigFloppyDriveTypeLabel(g_choice->floppy_type)
+              : "None");
       items[row] = (BoxItem){type_row, true};
     } else {
       items[row] = kDriveItems[choices[row]];

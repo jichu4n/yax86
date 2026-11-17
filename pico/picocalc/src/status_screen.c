@@ -10,7 +10,7 @@
 
 enum {
   // A label's width, in columns, before its value.
-  kLabelColumns = 9,
+  kLabelColumns = 10,
   // How often the page is drawn again while it shows.
   kRefreshUs = 1000 * 1000,
 };
