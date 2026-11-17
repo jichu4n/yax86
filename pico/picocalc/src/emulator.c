@@ -202,9 +202,10 @@ typedef struct RunClock {
 
 static RunClock g_clock;
 
-// Whether guest RAM is paged, and whether the VM is up, before which there is
-// no guest RAM to read.
+// Whether guest RAM is paged, how much guest RAM the VM has, and whether the VM
+// is up, before which there is no guest RAM to read.
 static bool g_is_paging;
+static uint32_t g_guest_ram_size;
 static bool g_is_vm_up;
 
 // ============================================================================
@@ -226,9 +227,22 @@ static uint64_t PausedUs(void) {
          (ScreenIsOpen() ? time_us_64() - g_clock.pause_start_us : 0);
 }
 
-// How much guest RAM the VM has.
+// How much guest RAM the VM asked for: its memory_kb, or the maximum without a
+// VM.
+static uint32_t RequestedRAMSize(void) {
+  return g_has_vm ? (uint32_t)g_vm->memory_kb * 1024
+                  : Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE;
+}
+
+// How much guest RAM the VM has. Bounded to the valid conventional memory
+// range so that GCC's range analysis knows GuestRAMSize() / 1024 is at most
+// three digits when FormatSystemLine() is inlined (-Wformat-truncation).
 static uint32_t GuestRAMSize(void) {
-  return g_is_paging ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE : kGuestRAMSize;
+  return g_guest_ram_size < Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE
+             ? Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE
+         : g_guest_ram_size > Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE
+             ? Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE
+             : g_guest_ram_size;
 }
 
 // The video adapter the VM runs with: a VM's, or the CGA without one.
@@ -395,7 +409,8 @@ static void FormatDiskLine(char* buffer, size_t size) {
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     const DiskImage* image = images[drive];
     char label[16];
-    if (drive < kNumVMFloppyDrives) {
+    if (drive < kNumVMFloppyDrives &&
+        FloppyGetDriveType((FloppyDrive)drive) != Y_FDC_DRIVE_TYPE_360KB) {
       snprintf(
           label, sizeof(label), "%s (%s):", kVMDriveLabels[drive],
           VMConfigFloppyDriveTypeLabel(FloppyGetDriveType((FloppyDrive)drive)));
@@ -591,22 +606,27 @@ static void SetPCSpeakerFrequency(
   SpeakerSetFrequency(frequency_hz);
 }
 
-// Page all of guest RAM through the PSRAM if it came up, and the last start
-// did not end in a hard fault: paging is the newest thing a fault could come
-// from, and without it the VM has the SRAM alone - see yax86_pico.h.
+// Hold guest RAM directly in SRAM when it fits. Otherwise page all of it
+// through kGuestRAMSize of frames, or, without the PSRAM or after a fault,
+// cap it at kGuestRAMSize held directly.
 static void ConfigureGuestRAM(YPlatformConfig* config) {
-  g_is_paging =
+  const uint32_t requested_size = RequestedRAMSize();
+  const bool can_page =
       PsramGetStats().state == kPsramOk && !g_init_status->is_after_fault;
-  if (!g_is_paging) {
-    config->direct_memory_size = kGuestRAMSize;
+  if (requested_size <= kGuestRAMSize || !can_page) {
+    g_is_paging = false;
+    g_guest_ram_size =
+        requested_size <= kGuestRAMSize ? requested_size : kGuestRAMSize;
+    config->direct_memory_size = g_guest_ram_size;
     config->direct_memory = g_guest_ram;
     config->paged_memory = NULL;
     return;
   }
+  g_is_paging = true;
+  g_guest_ram_size = requested_size;
   config->direct_memory_size = 0;
   config->direct_memory = NULL;
-  config->paged_memory = PagerInit(
-      g_guest_ram, kGuestRAMSize, Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE);
+  config->paged_memory = PagerInit(g_guest_ram, kGuestRAMSize, requested_size);
 }
 
 static bool InitVM(void) {
@@ -630,8 +650,15 @@ static bool InitVM(void) {
   FloppyAttach(&g_platform.fdc);
   HardDiskAttach(&g_platform.hdc);
   g_is_vm_up = true;
-  if (g_init_status->is_after_fault) {
-    EmulatorStatusBarPostMessage("Paging off: the last start crashed");
+  if (RequestedRAMSize() > g_guest_ram_size) {
+    char message[kTextColumns + 1];
+    snprintf(
+        message, sizeof(message), "Using %uK of %uK: %s",
+        (unsigned)(GuestRAMSize() / 1024),
+        (unsigned)(RequestedRAMSize() / 1024),
+        g_init_status->is_after_fault ? "the last start crashed"
+                                      : "PSRAM is not available");
+    EmulatorStatusBarPostMessage(message);
   }
   return true;
 }

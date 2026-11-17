@@ -15,6 +15,7 @@
 #include "runtime_log.h"
 #include "status_bar.h"
 #include "vm_drive_config_screen.h"
+#include "vm_memory_screen.h"
 #include "vm_video_adapter_screen.h"
 
 enum {
@@ -23,12 +24,13 @@ enum {
 
 typedef enum FormItem {
   kFormName = 0,
+  kFormMemory,
+  kFormVideoAdapter,
   // The drives' items, in the order of the VM's drives.
   kFormDriveA,
   kFormDriveB,
   kFormDriveC,
   kFormDriveD,
-  kFormVideoAdapter,
   kFormCreate,
   kNumFormItems,
 } FormItem;
@@ -43,16 +45,16 @@ static ListBox g_list_box;
 // creates.
 static bool g_is_existing;
 static uint8_t g_vm;
-// A new VM's name, what each drive is to hold, and its video adapter.
+// A new VM's name, what each drive is to hold, and its machine settings.
 static char g_name[kFSMaxFolderName + 1];
 static uint8_t g_name_length;
 static VMDriveChoice g_drives[kNumVMDrives];
-static YVideoAdapter g_video_adapter;
+static VMMachine g_machine;
 
 // The form's first item: its name for a new VM; for an existing one, at
-// the drives. g_list_box.selected counts from it.
+// the memory size. g_list_box.selected counts from it.
 static uint8_t FirstItem(void) {
-  return g_is_existing ? kFormDriveA : kFormName;
+  return g_is_existing ? kFormMemory : kFormName;
 }
 
 static uint8_t SelectedItem(void) {
@@ -78,7 +80,10 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
                                       : Y_FDC_DRIVE_TYPE_NONE;
     g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
-  g_video_adapter = Y_VIDEO_ADAPTER_CGA;
+  g_machine = (VMMachine){
+      .video_adapter = Y_VIDEO_ADAPTER_CGA,
+      .memory_kb = kVMDefaultMemoryKB,
+  };
   SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
 }
@@ -101,8 +106,11 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
         (drive == kVMDriveFD2 ? config.is_present[drive]
                               : config.drives[drive][0] != '\0');
   }
-  g_video_adapter = config.video_adapter;
-  SelectItem(kFormDriveA);
+  g_machine = (VMMachine){
+      .video_adapter = config.video_adapter,
+      .memory_kb = config.memory_kb,
+  };
+  SelectItem(kFormMemory);
   return ScreenOpen(&kVMConfigScreen);
 }
 
@@ -130,8 +138,8 @@ static __noinline ScreenResult Create(void) {
   const uint64_t start_us = time_us_64();
   // Blank disks are written through the guest's RAM, which is zeroed after.
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "New VM", what);
-  const VMListResult result = VMListCreate(
-      g_name, &drives, g_video_adapter, &transfer, &created, problem);
+  const VMListResult result =
+      VMListCreate(g_name, &drives, &g_machine, &transfer, &created, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
@@ -142,7 +150,8 @@ static __noinline ScreenResult Create(void) {
     SYSTEM_INFO(
         "vm_created", Y_LOG_STRING("name", created.name),
         Y_LOG_STRING(
-            "video_adapter", VMConfigVideoAdapterName(g_video_adapter)),
+            "video_adapter", VMConfigVideoAdapterName(g_machine.video_adapter)),
+        Y_LOG_UINT("memory_kb", g_machine.memory_kb),
         Y_LOG_BOOL("blank_fd1", drives.blank_sizes[kVMDriveFD1] != 0),
         Y_LOG_BOOL("blank_fd2", drives.blank_sizes[kVMDriveFD2] != 0),
         Y_LOG_BOOL("blank_hd1", drives.blank_sizes[kVMDriveHD1] != 0),
@@ -167,7 +176,7 @@ static __noinline ScreenResult Save(void) {
   snprintf(what, sizeof(what), "Writing %s's blank disks...", vm.name);
   FSTransfer transfer = VMManagerBeginCopy(g_vm_manager, "Configure", what);
   const VMListResult result =
-      VMListEdit(&vm, &drives, g_video_adapter, &transfer, problem);
+      VMListEdit(&vm, &drives, &g_machine, &transfer, problem);
   VMManagerEndCopy(g_vm_manager);
   if (result == kVMListRefused) {
     StatusBarSetProblem(problem);
@@ -178,7 +187,8 @@ static __noinline ScreenResult Save(void) {
     SYSTEM_INFO(
         "vm_edited", Y_LOG_STRING("name", vm.name),
         Y_LOG_STRING(
-            "video_adapter", VMConfigVideoAdapterName(g_video_adapter)));
+            "video_adapter", VMConfigVideoAdapterName(g_machine.video_adapter)),
+        Y_LOG_UINT("memory_kb", g_machine.memory_kb));
   } else {
     VMManagerShowProblem("vm_not_edited", &vm, problem);
   }
@@ -207,18 +217,22 @@ static bool TypeName(uint8_t key) {
 }
 
 // Carry out the item selected: create or save the VM, move on from the
-// name to the first drive, or open a drive's or the video adapter's choices.
+// name to the memory size, or open the memory's, the video adapter's or a
+// drive's choices.
 static ScreenResult OnSelect(void) {
   const uint8_t item = SelectedItem();
   if (item == kFormCreate) {
     return g_is_existing ? Save() : Create();
   }
   if (item == kFormName) {
-    SelectItem(kFormDriveA);
+    SelectItem(kFormMemory);
     return ScreenStays();
   }
+  if (item == kFormMemory) {
+    return VMMemoryScreenOpen(&g_machine.memory_kb);
+  }
   if (item == kFormVideoAdapter) {
-    return VMVideoAdapterScreenOpen(&g_video_adapter);
+    return VMVideoAdapterScreenOpen(&g_machine.video_adapter);
   }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
   return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
@@ -284,9 +298,15 @@ static void OnDraw(DisplayBox* box) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (BoxItem){rows[item], true};
   }
+  char memory[kVMMemoryLabelLength + 1];
+  VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
+  snprintf(
+      rows[kFormMemory], sizeof(rows[kFormMemory]), "%-15s %s", "Memory",
+      memory);
+  items[kFormMemory] = (BoxItem){rows[kFormMemory], true};
   snprintf(
       rows[kFormVideoAdapter], sizeof(rows[kFormVideoAdapter]), "%-15s %s",
-      "Video adapter", VMConfigVideoAdapterLabel(g_video_adapter));
+      "Video adapter", VMConfigVideoAdapterLabel(g_machine.video_adapter));
   items[kFormVideoAdapter] = (BoxItem){rows[kFormVideoAdapter], true};
   items[kFormCreate] = (BoxItem){g_is_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
