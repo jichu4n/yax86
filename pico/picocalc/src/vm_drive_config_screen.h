@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "core/fdc.h"
 #include "fs.h"
 #include "screen.h"
 
@@ -18,6 +19,8 @@ typedef struct VMDriveChoice {
   // Size in bytes of a new blank image of its own instead, or 0 if not a new
   // blank image.
   uint32_t blank_size;
+  // The drive's mechanism type, for a floppy drive.
+  YFDCDriveType floppy_type;
   // Whether the drive is there: false for floppy disk 2 or a hard disk
   // disabled.
   bool is_present;

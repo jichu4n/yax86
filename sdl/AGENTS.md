@@ -16,9 +16,13 @@ An SDL3 runtime for the emulator, built natively and through Emscripten as
   an idle machine's cost tracks the callback rate. It sits *under* 1/60s
   because at exactly 1/60s a slightly early callback would halve the rate.
   Events are pumped on every callback.
-- An optional floppy image path, default `floppy_a.img`, 360KB (368,640 bytes)
-  or 720KB (737,280 bytes) from `YFDCFindFormat()`; the browser build's
-  packaged boot floppy is 360KB. **A 10MB hard disk is attached by default** -
+- An optional floppy image path, default `floppy_a.img`, 360KB (368,640 bytes),
+  720KB (737,280 bytes), 1.2MB (1,228,800 bytes) or 1.44MB (1,474,560 bytes)
+  from `YFDCFindFormat()`, and `--fd-type 360k|720k|1.2m|1.44m` to set drive
+  0's mechanism type (`YPlatformConfig.floppy_drive_types[0]`, checked against
+  the image with `YFDCDoesDriveTypeSupportFormat()`); without `--fd-type` the
+  drive is the unconfigured stock XT drive, and the browser build's packaged
+  boot floppy remains 360KB. **A 10MB hard disk is attached by default** -
   blank unless `--hdd <image>` names one, to be partitioned and formatted from
   DOS - and `--no-hdd` leaves it out. The default matters because the browser
   build has no command line.

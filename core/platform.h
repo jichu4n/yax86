@@ -69,6 +69,9 @@ enum {
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
+  // FDC option ROM - mapped starting at 0xCC000 when a drive type is
+  // configured.
+  Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM = 0x0D,
   // Paged conventional memory: the part above direct_memory_size, when
   // YPlatformConfig.paged_memory is set.
   Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
@@ -390,8 +393,18 @@ typedef struct YPlatformConfig {
   YVideoAdapter video_adapter;
 
   // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
-  // to the BIOS. 0, the default, is taken as 1.
+  // to the BIOS. 0, the default, is taken as the number of leading drives
+  // configured in floppy_drive_types, or 1 if none are.
   uint8_t num_floppy_drives;
+
+  // Type of each floppy drive's mechanism. When any drive has a type other than
+  // Y_FDC_DRIVE_TYPE_NONE, the platform maps the Multi-Floppy BIOS Extension
+  // option ROM at 0xCC000 with these types in its configuration block, and any
+  // present drive left at Y_FDC_DRIVE_TYPE_NONE is configured as
+  // Y_FDC_DRIVE_TYPE_360KB. When all drives are Y_FDC_DRIVE_TYPE_NONE, no
+  // floppy option ROM is mapped and every drive acts as a stock XT
+  // double-density drive accepting 360KB and 720KB disks.
+  YFDCDriveType floppy_drive_types[Y_FDC_NUM_DRIVES];
 
   // Conventional memory that the CPU reads and writes directly, through its
   // direct data window: direct_memory_size bytes from address 0. Required
@@ -1287,6 +1300,12 @@ Y_FILE_PRIVATE void YPlatformFDCCallbackWritePortByte(
   YPlatformSync(platform);
 }
 
+Y_FILE_PRIVATE uint8_t YPlatformFDCCallbackReadOptionROMByte(
+    YPlatformMemoryMapEntry* entry, uint32_t relative_address) {
+  return YFDCReadOptionROMByte(
+      (const YFDCState*)entry->context, relative_address);
+}
+
 // ============================================================================
 // Callbacks for DMA module
 // ============================================================================
@@ -1588,13 +1607,26 @@ Y_FILE_PRIVATE void YPlatformInitPIT(YPlatformState* platform) {
   YPlatformRegisterPortMapEntry(platform, &pit_entry);
 }
 
+Y_FILE_PRIVATE uint8_t
+YPlatformEffectiveNumFloppyDrives(const YPlatformState* platform) {
+  if (platform->config.num_floppy_drives > 0) {
+    return platform->config.num_floppy_drives <= Y_FDC_NUM_DRIVES
+               ? platform->config.num_floppy_drives
+               : Y_FDC_NUM_DRIVES;
+  }
+  uint8_t count = 0;
+  while (count < Y_FDC_NUM_DRIVES &&
+         platform->config.floppy_drive_types[count] != Y_FDC_DRIVE_TYPE_NONE) {
+    ++count;
+  }
+  return count > 0 ? count : 1;
+}
+
 Y_FILE_PRIVATE void YPlatformInitPPI(YPlatformState* platform) {
   platform->ppi.config.context = platform;
   platform->ppi.config.logger = &platform->logger;
   platform->ppi.config.num_floppy_drives =
-      platform->config.num_floppy_drives > 0
-          ? platform->config.num_floppy_drives
-          : 1;
+      YPlatformEffectiveNumFloppyDrives(platform);
   platform->ppi.config.memory_size = Y_PPI_MEMORY_SIZE_256KB;
   // The DIP switches are what the BIOS branches on to decide which adapter to
   // program, so they have to agree with the adapter the platform registers.
@@ -1635,7 +1667,33 @@ Y_FILE_PRIVATE void YPlatformInitFDC(YPlatformState* platform) {
   platform->fdc.config.request_dma = YPlatformFDCCallbackRequestDMA;
   platform->fdc.config.read_image_byte = NULL;
   platform->fdc.config.write_image_byte = NULL;
+  const uint8_t num_drives = YPlatformEffectiveNumFloppyDrives(platform);
+  bool has_typed_drive = false;
+  for (uint8_t i = 0; i < num_drives; ++i) {
+    if (platform->config.floppy_drive_types[i] != Y_FDC_DRIVE_TYPE_NONE) {
+      has_typed_drive = true;
+    }
+  }
+  for (uint8_t i = 0; i < Y_FDC_NUM_DRIVES; ++i) {
+    YFDCDriveType type = i < num_drives ? platform->config.floppy_drive_types[i]
+                                        : Y_FDC_DRIVE_TYPE_NONE;
+    if (has_typed_drive && i < num_drives && type == Y_FDC_DRIVE_TYPE_NONE) {
+      type = Y_FDC_DRIVE_TYPE_360KB;
+    }
+    platform->fdc.config.drive_types[i] = type;
+  }
   YFDCInit(&platform->fdc);
+  if (has_typed_drive) {
+    const uint32_t option_rom_size = YFDCGetOptionROMSize();
+    YPlatformMemoryMapEntry option_rom_entry = {
+        .context = &platform->fdc,
+        .entry_type = Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM,
+        .start = Y_FDC_OPTION_ROM_START_ADDRESS,
+        .end = Y_FDC_OPTION_ROM_START_ADDRESS + option_rom_size - 1,
+        .read_byte_fn = YPlatformFDCCallbackReadOptionROMByte,
+    };
+    YPlatformRegisterMemoryMapEntry(platform, &option_rom_entry);
+  }
   YPlatformPortMapEntry fdc_entry = {
       .entry_type = (YPlatformPortMapEntryType)Y_PLATFORM_PORT_MAP_ENTRY_FDC,
       .start = 0x3F0,

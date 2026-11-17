@@ -352,13 +352,19 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   ```
   # yax86/vm/dos330/vm.cfg
   fd1=../../images/msdos330/disk01.img
+  fd1_type=360k
   fd2=../../images/msdos330/disk02.img
+  fd2_type=360k
   hd1=hd1.img
   video_adapter=cga
   ```
 
-  `fd1` and `fd2` are 360KB or 720KB floppies, their format taken from the
-  image's size, `hd1` and `hd2` the hard disk controller's master and slave,
+  `fd1` and `fd2` are 360KB, 720KB, 1.2MB or 1.44MB floppies, their format
+  taken from the image's size and checked against `fd1_type` and `fd2_type`
+  (`360k`, `720k`, `1.2m` or `1.44m`; when not named, `360k`, or `720k` if a
+  720KB image is in the drive, and the Multi-Floppy BIOS option ROM is mapped
+  only when a drive type is named or a 720KB image is mounted so `DOS330` keeps
+  its boot count), `hd1` and `hd2` the hard disk controller's master and slave,
   each the core's 10MB drive, and `video_adapter` is `cga` or `mda`, `cga`
   without it. Without a VM, the built-in 360KB floppy runs with the CGA. A key
   `vm.cfg` has that this firmware does not know is logged as
@@ -575,36 +581,42 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
   floppy disks 1 and 2, hard disks 1 and 2, Video adapter - `CGA` or `MDA`,
-  on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Floppy
-  disk 1 is Empty, New floppy image (360KB), New floppy image (720KB), or
-  Existing floppy image, a 360KB or 720KB image from the browser; floppy disk
-  2 is Disabled or any of those; and a hard disk is Disabled, New disk image
-  (10MB), or Existing disk image, a 10MB one. A new VM starts with floppy disk
-  1 empty, floppy disk 2 and hard disk 2 disabled, a new disk image as hard
-  disk 1, and `CGA`. An existing image is shared, like any image outside the
-  VM's folder. A floppy drive with no disk is "empty" wherever the menu says
-  what a drive holds, as the status rows have it. Backspace on the form only
-  ever erases the name - Esc leaves it - so that a press meant for the name
-  does not throw the form away. One image in two drives is refused before
-  anything is written. Create writes `vm.cfg` with the drives there, as paths
-  relative to it, and `video_adapter`, always written as `cga` or `mda`, in one
-  `ConfigFileUpdate()` through `VMConfigSave()`, which removes the line of a
-  drive left out and a line left with nothing else on it.
+  on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Each
+  floppy drive's page (`src/vm_drive_config_screen.c`) has Drive type (`360KB`,
+  `720KB`, `1.2MB` or `1.44MB`, on `src/vm_floppy_type_screen.c`), Empty, the
+  blank-image sizes that drive type accepts (`New floppy image (360KB)`,
+  `(720KB)`, `(1.2MB)` or `(1.44MB)`), and Existing floppy image, an image from
+  the browser that fits the drive type (floppy disk 2 has Disabled first); a
+  hard disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB
+  one. A new VM starts with floppy disk 1 empty (`360KB`), floppy disk 2 and
+  hard disk 2 disabled, a new disk image as hard disk 1, and `CGA`. An existing
+  image is shared, like any image outside the VM's folder. A floppy drive with
+  no disk is "empty" wherever the menu says what a drive holds, as the status
+  rows have it. Backspace on the form only ever erases the name - Esc leaves
+  it - so that a press meant for the name does not throw the form away. One
+  image in two drives is refused before anything is written. Create writes
+  `vm.cfg` with the drives there, as paths relative to it, `fd1_type` and
+  `fd2_type` for the floppy drives present, and `video_adapter`, always written
+  as `cga` or `mda`, in one `ConfigFileUpdate()` through `VMConfigSave()`,
+  which removes the line of a drive left out and a line left with nothing else
+  on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
   for both, starting from its drives and video adapter as its `vm.cfg` has
-  them, with no name and Save for Create. Save writes the four drives and
-  `video_adapter` the same way, which keeps the file's comments and other
-  lines. An image of the VM's own a drive stops holding stays in its folder -
-  nothing is deleted behind the user's back - and goes with the VM.
+  them, with no name and Save for Create. Save writes the four drives, the
+  floppy drive types and `video_adapter` the same way, which keeps the file's
+  comments and other lines. An image of the VM's own a drive stops holding
+  stays in its folder - nothing is deleted behind the user's back - and goes
+  with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
-  was**: `fd1.img` or `fd2.img`, 360KB or 720KB, for DOS's `FORMAT` - which
-  the floppy controller's Format Track makes possible (see `core/AGENTS.md`
-  for formatting 720KB under MS-DOS 3.30) - and `hd1.img` or `hd2.img`, the
-  core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name already in the
-  folder - an edit's new disk beside the old - gives `hd1_2.img` to `hd1_9.img`
-  and the like instead, so nothing is written over. The hard disk takes 5.1
-  seconds to write, a 360KB floppy a fifth of a second, and a 720KB floppy half
-  a second. Zeros rather than space merely allocated, which would hold whatever
+  was**: `fd1.img` or `fd2.img`, 360KB, 720KB, 1.2MB or 1.44MB, for DOS's
+  `FORMAT` - which the floppy controller's Format Track and the Multi-Floppy
+  BIOS option ROM make possible (see `core/AGENTS.md`) - and `hd1.img` or
+  `hd2.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name
+  already in the folder - an edit's new disk beside the old - gives `hd1_2.img`
+  to `hd1_9.img` and the like instead, so nothing is written over. The hard
+  disk takes 5.1 seconds to write, a 360KB floppy a fifth of a second, a 720KB
+  floppy half a second, a 1.2MB floppy 0.7 seconds, and a 1.44MB floppy 0.8
+  seconds. Zeros rather than space merely allocated, which would hold whatever
   the card held there - an old file's sectors, which FDISK could take for a
   partition table.
 - **A clone copies through 32KB of the guest's RAM**, which is not the
@@ -624,11 +636,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   prompting for a disk swap; DOS330 names `fd2=""` for that, and its boot
   is measured with two. `YPlatformConfig.num_floppy_drives` sets what the
   BIOS's DIP switches report.
-- **The menu changes the disk in either drive** for any 360KB or 720KB image on
-  the card, or ejects it. `DiskImageClose()` writes back the sector held and
-  closes the file; the FDC then reports the drive not ready, which DOS
-  shows as "General Failure ... Abort, Retry, Fail?". The built-in floppy is
-  not offered again once ejected - a reset brings it back.
+- **The menu changes the disk in either drive** for any floppy image on the
+  card that fits the drive's type, or ejects it. `DiskImageClose()` writes back
+  the sector held and closes the file; the FDC then reports the drive not
+  ready, which DOS shows as "General Failure ... Abort, Retry, Fail?". The
+  built-in floppy is not offered again once ejected - a reset brings it back.
 - **An image goes in one drive at a time.** Each drive keeps its own copy of
   a sector, so two drives writing one file would each overwrite the other's
   changes; inserting an image the other drive holds is refused with a
@@ -640,16 +652,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   and a delete, walking down to four folders deep with one pair of paths
   added to and put back, so a level costs the stack only its lengths.
 - `src/file_list.c` lists a folder for the menu's browser: `..`, folders,
-  then files exactly the image size, each by name, with hidden and system
-  entries left out. It holds 64, and says when a folder had more. Names are
-  8.3, as FatFs is built without long names.
-- **A floppy image is 360KB (368,640 bytes) or 720KB (737,280 bytes)**, chosen
-  from the file's size by `YFDCFindFormat()`. On a computer, a blank 360KB
-  image is `dd if=/dev/zero of=fd1.img bs=512 count=720` (formatted with
-  `mformat -i fd1.img -f 360 ::`) and a blank 720KB image is
-  `dd if=/dev/zero of=fd1.img bs=512 count=1440` (formatted with
-  `mformat -i fd1.img -f 720 ::`). See `core/AGENTS.md` for how MS-DOS 3.30
-  reads, boots and formats 720KB images.
+  then files matching the accepted image sizes, each by name, with hidden and
+  system entries left out. It holds 64, and says when a folder had more. Names
+  are 8.3, as FatFs is built without long names.
+- **A floppy image is 360KB (368,640 bytes), 720KB (737,280 bytes), 1.2MB
+  (1,228,800 bytes) or 1.44MB (1,474,560 bytes)**, chosen from the file's size
+  by `YFDCFindFormat()` and checked against the drive's type with
+  `YFDCDoesDriveTypeSupportFormat()`. On a computer, a blank image is
+  `dd if=/dev/zero of=fd1.img bs=512 count=<sectors>` (`720` for 360KB, `1440`
+  for 720KB, `2400` for 1.2MB, `2880` for 1.44MB), formatted with
+  `mformat -i fd1.img -f <size> ::` (`360`, `720`, `1200` or `1440`). See
+  `core/AGENTS.md` for how MS-DOS 3.30 reads, boots and formats each.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
@@ -909,8 +922,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
 - **The status page's lines are the emulator's**: it fills them in on
   every pass while the menu shows, and the status screen draws them every
-  second. `Display` starts with the adapter, `CGA` or `MDA`. Filling them in
-  costs nothing that matters while the VM is paused.
+  second. `Display` starts with the adapter, `CGA` or `MDA`, and `Disk` shows
+  each floppy drive's type alongside its label (`FD1 (360KB):`, `FD2 (1.44MB):`).
+  Filling them in costs nothing that matters while the VM is paused.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A

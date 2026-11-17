@@ -76,12 +76,67 @@ Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat720KB = {
     .sector_size = Y_FDC_FORMAT_720KB_SECTOR_SIZE,
 };
 
+// The 5.25" 1.2MB double-sided high-density floppy disk format.
+enum {
+  Y_FDC_FORMAT_1200KB_NUM_HEADS = 2,
+  Y_FDC_FORMAT_1200KB_NUM_TRACKS = 80,
+  Y_FDC_FORMAT_1200KB_NUM_SECTORS_PER_TRACK = 15,
+  Y_FDC_FORMAT_1200KB_SECTOR_SIZE = 512,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  Y_FDC_FORMAT_1200KB_IMAGE_SIZE = Y_FDC_FORMAT_1200KB_NUM_HEADS *
+      Y_FDC_FORMAT_1200KB_NUM_TRACKS *
+      Y_FDC_FORMAT_1200KB_NUM_SECTORS_PER_TRACK *
+      Y_FDC_FORMAT_1200KB_SECTOR_SIZE,
+};
+Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat1200KB = {
+    .num_heads = Y_FDC_FORMAT_1200KB_NUM_HEADS,
+    .num_tracks = Y_FDC_FORMAT_1200KB_NUM_TRACKS,
+    .num_sectors_per_track = Y_FDC_FORMAT_1200KB_NUM_SECTORS_PER_TRACK,
+    .sector_size = Y_FDC_FORMAT_1200KB_SECTOR_SIZE,
+};
+
+// The 3.5" 1.44MB double-sided high-density floppy disk format.
+enum {
+  Y_FDC_FORMAT_1440KB_NUM_HEADS = 2,
+  Y_FDC_FORMAT_1440KB_NUM_TRACKS = 80,
+  Y_FDC_FORMAT_1440KB_NUM_SECTORS_PER_TRACK = 18,
+  Y_FDC_FORMAT_1440KB_SECTOR_SIZE = 512,
+  // Size in bytes of an image of such a disk, so that a host can size a buffer
+  // for one at compile time.
+  Y_FDC_FORMAT_1440KB_IMAGE_SIZE = Y_FDC_FORMAT_1440KB_NUM_HEADS *
+      Y_FDC_FORMAT_1440KB_NUM_TRACKS *
+      Y_FDC_FORMAT_1440KB_NUM_SECTORS_PER_TRACK *
+      Y_FDC_FORMAT_1440KB_SECTOR_SIZE,
+};
+Y_PUBLIC_HEADER const YFDCDiskFormat YFDCFormat1440KB = {
+    .num_heads = Y_FDC_FORMAT_1440KB_NUM_HEADS,
+    .num_tracks = Y_FDC_FORMAT_1440KB_NUM_TRACKS,
+    .num_sectors_per_track = Y_FDC_FORMAT_1440KB_NUM_SECTORS_PER_TRACK,
+    .sector_size = Y_FDC_FORMAT_1440KB_SECTOR_SIZE,
+};
+
 enum {
   // Number of floppy disk formats supported.
-  Y_FDC_NUM_FORMATS = 2,
+  Y_FDC_NUM_FORMATS = 4,
   // Largest image size in bytes among the supported floppy disk formats, so
   // that a host can size a buffer for any floppy image at compile time.
-  Y_FDC_MAX_IMAGE_SIZE = Y_FDC_FORMAT_720KB_IMAGE_SIZE,
+  Y_FDC_MAX_IMAGE_SIZE = Y_FDC_FORMAT_1440KB_IMAGE_SIZE,
+};
+
+// Returns the size in bytes of an image of format.
+Y_PUBLIC_HEADER inline uint32_t YFDCFormatImageSize(
+    const YFDCDiskFormat* format) {
+  return (uint32_t)format->num_heads * format->num_tracks *
+         format->num_sectors_per_track * format->sector_size;
+}
+
+// The supported floppy disk formats, in ascending order of image size.
+Y_PUBLIC_HEADER const YFDCDiskFormat* const YFDCFormats[Y_FDC_NUM_FORMATS] = {
+    &YFDCFormat360KB,
+    &YFDCFormat720KB,
+    &YFDCFormat1200KB,
+    &YFDCFormat1440KB,
 };
 
 // Image sizes in bytes of the supported floppy disk formats, in ascending
@@ -89,21 +144,84 @@ enum {
 Y_PUBLIC_HEADER const uint32_t YFDCFormatImageSizes[Y_FDC_NUM_FORMATS] = {
     Y_FDC_FORMAT_360KB_IMAGE_SIZE,
     Y_FDC_FORMAT_720KB_IMAGE_SIZE,
+    Y_FDC_FORMAT_1200KB_IMAGE_SIZE,
+    Y_FDC_FORMAT_1440KB_IMAGE_SIZE,
 };
 
 // Returns the floppy disk format for an image of image_size bytes, or NULL if
 // image_size is not a supported floppy image size.
 Y_PUBLIC_HEADER inline const YFDCDiskFormat* YFDCFindFormat(
     uint32_t image_size) {
-  switch (image_size) {
-    case Y_FDC_FORMAT_360KB_IMAGE_SIZE:
-      return &YFDCFormat360KB;
-    case Y_FDC_FORMAT_720KB_IMAGE_SIZE:
-      return &YFDCFormat720KB;
+  for (uint8_t i = 0; i < Y_FDC_NUM_FORMATS; ++i) {
+    if (YFDCFormatImageSize(YFDCFormats[i]) == image_size) {
+      return YFDCFormats[i];
+    }
+  }
+  return NULL;
+}
+
+// Type of a floppy drive mechanism. Values 1 to 4 match the PC/AT CMOS and
+// Multi-Floppy BIOS Extension drive type codes.
+typedef enum YFDCDriveType {
+  // No drive type configured (or drive absent in the option ROM): the stock XT
+  // double-density drive, accepting 360KB and 720KB disks at 250kbps.
+  Y_FDC_DRIVE_TYPE_NONE = 0,
+  // 5.25" 360KB double-density drive (40 tracks).
+  Y_FDC_DRIVE_TYPE_360KB = 1,
+  // 5.25" 1.2MB high-density drive (80 tracks; double-steps 40-track media at
+  // 300kbps).
+  Y_FDC_DRIVE_TYPE_1200KB = 2,
+  // 3.5" 720KB double-density drive (80 tracks).
+  Y_FDC_DRIVE_TYPE_720KB = 3,
+  // 3.5" 1.44MB high-density drive (80 tracks).
+  Y_FDC_DRIVE_TYPE_1440KB = 4,
+  Y_FDC_NUM_DRIVE_TYPES = 5,
+} YFDCDriveType;
+
+// Returns whether a drive of drive_type accepts a disk of format.
+Y_PUBLIC_HEADER inline bool YFDCDoesDriveTypeSupportFormat(
+    YFDCDriveType drive_type, const YFDCDiskFormat* format) {
+  if (format == NULL) {
+    return false;
+  }
+  const uint32_t size = YFDCFormatImageSize(format);
+  switch (drive_type) {
+    case Y_FDC_DRIVE_TYPE_NONE:
+      return size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ||
+             size == Y_FDC_FORMAT_720KB_IMAGE_SIZE;
+    case Y_FDC_DRIVE_TYPE_360KB:
+      return size == Y_FDC_FORMAT_360KB_IMAGE_SIZE;
+    case Y_FDC_DRIVE_TYPE_720KB:
+      return size == Y_FDC_FORMAT_720KB_IMAGE_SIZE;
+    case Y_FDC_DRIVE_TYPE_1200KB:
+      return size == Y_FDC_FORMAT_360KB_IMAGE_SIZE ||
+             size == Y_FDC_FORMAT_1200KB_IMAGE_SIZE;
+    case Y_FDC_DRIVE_TYPE_1440KB:
+      return size == Y_FDC_FORMAT_720KB_IMAGE_SIZE ||
+             size == Y_FDC_FORMAT_1440KB_IMAGE_SIZE;
     default:
-      return NULL;
+      return false;
   }
 }
+
+// Data transfer rates, as written to bits 1-0 of the Configuration Control
+// Register (CCR, port 0x3F7).
+typedef enum YFDCDataRate {
+  Y_FDC_DATA_RATE_500KBPS = 0,
+  Y_FDC_DATA_RATE_300KBPS = 1,
+  Y_FDC_DATA_RATE_250KBPS = 2,
+  Y_FDC_DATA_RATE_1MBPS = 3,
+} YFDCDataRate;
+
+enum {
+  // Start address of the floppy option ROM. Clear of the XTIDE ROM at
+  // 0xC8000-0xCAFFF and aligned to the memory map's 4KB pages.
+  Y_FDC_OPTION_ROM_START_ADDRESS = 0xCC000,
+  // Offset and size in bytes of the configuration block at the end of the
+  // 8KB Multi-Floppy BIOS Extension ROM (0x1FC0-0x1FFF).
+  Y_FDC_OPTION_ROM_CONFIG_OFFSET = 0x1FC0,
+  Y_FDC_OPTION_ROM_CONFIG_SIZE = 64,
+};
 
 struct YFDCState;
 
@@ -136,7 +254,22 @@ typedef enum YFDCPort {
   Y_FDC_PORT_MSR = 0x3F4,
   // Data Register (read/write).
   Y_FDC_PORT_DATA = 0x3F5,
+  // Digital Input Register (read-only) and Configuration Control Register
+  // (write-only).
+  Y_FDC_PORT_DIR = 0x3F7,
+  Y_FDC_PORT_CCR = 0x3F7,
 } YFDCPort;
+
+// Flags for the Digital Input Register (DIR, port 0x3F7 read) and
+// Configuration Control Register (CCR, port 0x3F7 write).
+enum {
+  // Bit 7 of DIR: the selected drive's disk-change line (1 = disk changed).
+  Y_FDC_DIR_DISK_CHANGED = 1 << 7,
+  // Bits 6-0 of DIR are undriven by the floppy controller and read as 1.
+  Y_FDC_DIR_UNDRIVEN_BITS = 0x7F,
+  // Bits 1-0 of CCR: the data transfer rate (YFDCDataRate).
+  Y_FDC_CCR_DATA_RATE_MASK = 0x03,
+};
 
 // Flags for the Main Status Register (MSR).
 enum {
@@ -252,6 +385,10 @@ typedef struct YFDCDriveState {
   // Whether there is a pending interrupt from a completed Seek or Recalibrate
   // operation on this drive.
   bool has_pending_interrupt;
+  // Whether the disk-change line is active for this drive. Set when a disk is
+  // inserted or ejected, and cleared by a Seek or Recalibrate when a disk is
+  // in the drive.
+  bool is_disk_changed;
 } YFDCDriveState;
 
 // Caller-provided runtime configuration for the FDC.
@@ -261,6 +398,11 @@ typedef struct YFDCConfig {
 
   // Logger for this module. May be NULL.
   YLogger* logger;
+
+  // Type of each drive's mechanism. Y_FDC_DRIVE_TYPE_NONE (0), the default, is
+  // a stock XT double-density drive accepting 360KB and 720KB disks at
+  // 250kbps.
+  YFDCDriveType drive_types[Y_FDC_NUM_DRIVES];
 
   // Callback to raise an IRQ6 (FDC interrupt) to the CPU.
   void (*raise_irq6)(void* context);
@@ -301,6 +443,14 @@ typedef struct YFDCState {
   // Value of the Digital Output Register (DOR) from the last write to port
   // 0x3F2.
   uint8_t dor;
+  // Active data transfer rate, initialized to Y_FDC_DATA_RATE_250KBPS by
+  // YFDCInit() and updated by writes to the Configuration Control Register
+  // (port 0x3F7).
+  YFDCDataRate data_rate;
+  // The 64-byte configuration block served at offset 0x1FC0 of the Multi-Floppy
+  // BIOS Extension option ROM, built once by YFDCInit() from
+  // config.drive_types.
+  uint8_t option_rom_config[Y_FDC_OPTION_ROM_CONFIG_SIZE];
 
   // Per-drive state.
   YFDCDriveState drives[Y_FDC_NUM_DRIVES];
@@ -352,6 +502,17 @@ typedef struct YFDCState {
 
 // Initializes the FDC to its power-on state.
 Y_PUBLIC void YFDCInit(YFDCState* fdc);
+
+// Returns the size of the option ROM in bytes.
+Y_PUBLIC uint32_t YFDCGetOptionROMSize(void);
+
+// Returns a pointer to the raw option ROM image, YFDCGetOptionROMSize() bytes
+// of it.
+Y_PUBLIC const uint8_t* YFDCGetOptionROMData(void);
+
+// Reads a byte at offset into the option ROM, serving the 64-byte configuration
+// block at 0x1FC0 from fdc->option_rom_config and the rest from the ROM image.
+Y_PUBLIC uint8_t YFDCReadOptionROMByte(const YFDCState* fdc, uint32_t offset);
 
 // Handles reads from the FDC's I/O ports.
 Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port);

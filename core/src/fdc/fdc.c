@@ -1,5 +1,6 @@
 #ifndef YAX86_IMPLEMENTATION
 #include "../util/common.h"
+#include "fdc_option_rom_data.h"
 #include "public.h"
 #endif  // YAX86_IMPLEMENTATION
 
@@ -116,6 +117,10 @@ Y_FILE_PRIVATE void YFDCPerformSeek(
 
   // On 2nd tick, seek is complete.
   drive->track = target_track;
+  // A step pulse while a disk is in the drive clears the disk-change line.
+  if (drive->is_present) {
+    drive->is_disk_changed = false;
+  }
   drive->is_busy = false;
 
   // Set Status Register 0 (ST0)
@@ -180,6 +185,39 @@ Y_FILE_PRIVATE void YFDCFinishReadWrite(
   YFDCFinishCommandExecution(fdc);
 }
 
+// Returns whether the controller's active data rate matches the disk in
+// drive_index for that drive's mechanism.
+Y_FILE_PRIVATE bool YFDCIsDataRateValid(
+    const YFDCState* fdc, uint8_t drive_index) {
+  const YFDCDiskFormat* format = fdc->drives[drive_index].format;
+  const YFDCDriveType drive_type = fdc->config.drive_types[drive_index];
+  if (!YFDCDoesDriveTypeSupportFormat(drive_type, format)) {
+    return false;
+  }
+  YFDCDataRate required_rate = Y_FDC_DATA_RATE_250KBPS;
+  if (format->num_sectors_per_track >=
+      Y_FDC_FORMAT_1200KB_NUM_SECTORS_PER_TRACK) {
+    required_rate = Y_FDC_DATA_RATE_500KBPS;
+  } else if (drive_type == Y_FDC_DRIVE_TYPE_1200KB) {
+    required_rate = Y_FDC_DATA_RATE_300KBPS;
+  }
+  return fdc->data_rate == required_rate;
+}
+
+// The cylinder on the disk under the head of drive_index. An 80-track 1.2MB
+// drive double-steps 40-track 360KB media, so physical track 2*C sits over
+// disk cylinder C.
+Y_FILE_PRIVATE uint8_t
+YFDCDiskCylinderForDrive(const YFDCState* fdc, uint8_t drive_index) {
+  const YFDCDriveState* drive = &fdc->drives[drive_index];
+  if (fdc->config.drive_types[drive_index] == Y_FDC_DRIVE_TYPE_1200KB &&
+      drive->format != NULL &&
+      drive->format->num_tracks == Y_FDC_FORMAT_360KB_NUM_TRACKS) {
+    return drive->track >> 1;
+  }
+  return drive->track;
+}
+
 // Handler for Write Data command.
 Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
   if (fdc->current_command_ticks == 0) {
@@ -207,6 +245,12 @@ Y_FILE_PRIVATE void YFDCHandleWriteData(YFDCState* fdc) {
           Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
               head_address << 2 | drive_index,
           0, 0);
+      return;
+    }
+    if (!YFDCIsDataRateValid(fdc, drive_index)) {
+      YFDCFinishReadWrite(
+          fdc, Y_FDC_ST0_ABNORMAL_TERMINATION | head_address << 2 | drive_index,
+          Y_FDC_ST1_MISSING_ADDRESS_MARK, 0);
       return;
     }
 
@@ -354,8 +398,8 @@ Y_FILE_PRIVATE bool YFDCTakeFormatIDByte(YFDCState* fdc, uint8_t value) {
       const YFDCDriveState* drive = &fdc->drives[drive_index];
       const uint8_t physical_head = (drive_head >> 2) & 0x01;
       const uint32_t offset = YFDCComputeOffset(
-          *drive->format, physical_head, drive->track, fdc->transfer.sector,
-          0);
+          *drive->format, physical_head,
+          YFDCDiskCylinderForDrive(fdc, drive_index), fdc->transfer.sector, 0);
       const uint8_t fill = *YFDCCommandBufferGet(
           &fdc->command_buffer, Y_FDC_FORMAT_PARAM_FILL_BYTE);
       if (offset != Y_FDC_INVALID_OFFSET && fdc->config.write_image_byte) {
@@ -385,17 +429,23 @@ Y_FILE_PRIVATE void YFDCHandleFormatTrack(YFDCState* fdc) {
   const uint8_t drive_index = drive_head & 0x03;
   const uint8_t head_address = (drive_head >> 2) & 0x01;
   if (fdc->current_command_ticks == 0) {
-    fdc->transfer.cylinder = fdc->drives[drive_index].track;
+    fdc->transfer.cylinder = YFDCDiskCylinderForDrive(fdc, drive_index);
     fdc->transfer.head = head_address;
     fdc->transfer.sector = 1;
-    fdc->transfer.sector_size_code = *YFDCCommandBufferGet(
-        &fdc->command_buffer, 2);
+    fdc->transfer.sector_size_code =
+        *YFDCCommandBufferGet(&fdc->command_buffer, 2);
     if (!fdc->drives[drive_index].is_present) {
       YFDCFinishReadWrite(
           fdc,
           Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
               head_address << 2 | drive_index,
           0, 0);
+      return;
+    }
+    if (!YFDCIsDataRateValid(fdc, drive_index)) {
+      YFDCFinishReadWrite(
+          fdc, Y_FDC_ST0_ABNORMAL_TERMINATION | head_address << 2 | drive_index,
+          Y_FDC_ST1_MISSING_ADDRESS_MARK, 0);
       return;
     }
     fdc->transfer.sector_byte_index = 0;
@@ -419,8 +469,8 @@ Y_FILE_PRIVATE void YFDCHandleFormatTrack(YFDCState* fdc) {
   }
   if (is_done) {
     YFDCFinishReadWrite(
-        fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index,
-        0, 0);
+        fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index, 0,
+        0);
   }
 }
 
@@ -452,6 +502,12 @@ Y_FILE_PRIVATE Y_HOT void YFDCHandleReadData(YFDCState* fdc) {
           Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
               head_address << 2 | drive_index,
           0, 0);
+      return;
+    }
+    if (!YFDCIsDataRateValid(fdc, drive_index)) {
+      YFDCFinishReadWrite(
+          fdc, Y_FDC_ST0_ABNORMAL_TERMINATION | head_address << 2 | drive_index,
+          Y_FDC_ST1_MISSING_ADDRESS_MARK, 0);
       return;
     }
 
@@ -616,6 +672,35 @@ Y_FILE_PRIVATE void YFDCHandleSenseInterruptStatus(YFDCState* fdc) {
   YFDCFinishCommandExecution(fdc);
 }
 
+// Handler for Read ID command: reports the sector header ID of the track under
+// the head (sector 1, 512 bytes).
+Y_FILE_PRIVATE void YFDCHandleReadID(YFDCState* fdc) {
+  const uint8_t drive_head = *YFDCCommandBufferGet(&fdc->command_buffer, 1);
+  const uint8_t drive_index = drive_head & 0x03;
+  const uint8_t head_address = (drive_head >> 2) & 0x01;
+  fdc->transfer.cylinder = YFDCDiskCylinderForDrive(fdc, drive_index);
+  fdc->transfer.head = head_address;
+  fdc->transfer.sector = 1;
+  fdc->transfer.sector_size_code = 2;
+  if (!fdc->drives[drive_index].is_present) {
+    YFDCFinishReadWrite(
+        fdc,
+        Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY |
+            head_address << 2 | drive_index,
+        0, 0);
+    return;
+  }
+  if (!YFDCIsDataRateValid(fdc, drive_index)) {
+    YFDCFinishReadWrite(
+        fdc, Y_FDC_ST0_ABNORMAL_TERMINATION | head_address << 2 | drive_index,
+        Y_FDC_ST1_MISSING_ADDRESS_MARK, 0);
+    return;
+  }
+  YFDCFinishReadWrite(
+      fdc, Y_FDC_ST0_NORMAL_TERMINATION | head_address << 2 | drive_index, 0,
+      0);
+}
+
 // List of supported FDC commands.
 // The opcodes here represent the base 5-bit command.
 Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
@@ -650,7 +735,9 @@ Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
      .num_param_bytes = 8,
      .handler = NULL},
     // Read ID
-    {.opcode = Y_FDC_CMD_READ_ID, .num_param_bytes = 1, .handler = NULL},
+    {.opcode = Y_FDC_CMD_READ_ID,
+     .num_param_bytes = 1,
+     .handler = YFDCHandleReadID},
     // Read Deleted Data
     {.opcode = Y_FDC_CMD_READ_DELETED_DATA,
      .num_param_bytes = 8,
@@ -673,10 +760,59 @@ Y_FILE_PRIVATE const YFDCCommandMetadata YFDCCommandMetadataTable[] = {
      .handler = NULL},
 };
 
-// Nothing to do: an FDC powers on with every field at zero, and the caller has
-// already zeroed the state. Kept so that every module is brought up the same
-// way, and so that a non-zero default acquired later has somewhere to go.
-Y_PUBLIC void YFDCInit(Y_UNUSED YFDCState* fdc) {}
+enum {
+  // Offsets within the 64-byte configuration block at 0x1FC0 of the
+  // Multi-Floppy BIOS Extension ROM:
+  //   0x00: checksum correction byte (makes the 64-byte block sum to 0)
+  //   0x01: eight 4-byte drive entries (<CMOS type>, <FDC>, <drive>, 0)
+  //   0x21: two 4-byte FDC entries (dw base, db irq, db dma)
+  //   0x29: dw config_delay
+  //   0x2B: db config_flags
+  Y_FDC_OPTION_ROM_DRIVE_CONFIG_OFFSET = 0x01,
+  Y_FDC_OPTION_ROM_DRIVE_ENTRY_SIZE = 4,
+  Y_FDC_OPTION_ROM_CONFIG_FLAGS_OFFSET = 0x2B,
+  // Bit in config_flags that prompts "Press F2 to run the configuration
+  // utility" and waits 3 seconds on every boot.
+  Y_FDC_OPTION_ROM_CONFIG_ON_BOOT = 0x04,
+};
+
+Y_PUBLIC void YFDCInit(YFDCState* fdc) {
+  // Until the guest writes the Configuration Control Register, the controller
+  // runs at the stock XT 250kbps double-density rate.
+  fdc->data_rate = Y_FDC_DATA_RATE_250KBPS;
+  for (uint8_t i = 0; i < Y_FDC_OPTION_ROM_CONFIG_SIZE; ++i) {
+    fdc->option_rom_config[i] =
+        YFDCOptionROMData[Y_FDC_OPTION_ROM_CONFIG_OFFSET + i];
+  }
+  for (uint8_t drive = 0; drive < Y_FDC_NUM_DRIVES; ++drive) {
+    const uint8_t offset = Y_FDC_OPTION_ROM_DRIVE_CONFIG_OFFSET +
+                           drive * Y_FDC_OPTION_ROM_DRIVE_ENTRY_SIZE;
+    fdc->option_rom_config[offset] = (uint8_t)fdc->config.drive_types[drive];
+  }
+  fdc->option_rom_config[Y_FDC_OPTION_ROM_CONFIG_FLAGS_OFFSET] &=
+      (uint8_t)~Y_FDC_OPTION_ROM_CONFIG_ON_BOOT;
+  uint8_t sum = 0;
+  for (uint8_t i = 1; i < Y_FDC_OPTION_ROM_CONFIG_SIZE; ++i) {
+    sum = (uint8_t)(sum + fdc->option_rom_config[i]);
+  }
+  fdc->option_rom_config[0] = (uint8_t)(0 - sum);
+}
+
+Y_PUBLIC uint32_t YFDCGetOptionROMSize(void) {
+  return Y_FDC_OPTION_ROM_DATA_SIZE;
+}
+
+Y_PUBLIC const uint8_t* YFDCGetOptionROMData(void) { return YFDCOptionROMData; }
+
+Y_PUBLIC uint8_t YFDCReadOptionROMByte(const YFDCState* fdc, uint32_t offset) {
+  if (offset >= Y_FDC_OPTION_ROM_DATA_SIZE) {
+    return 0xFF;
+  }
+  if (offset >= Y_FDC_OPTION_ROM_CONFIG_OFFSET) {
+    return fdc->option_rom_config[offset - Y_FDC_OPTION_ROM_CONFIG_OFFSET];
+  }
+  return YFDCOptionROMData[offset];
+}
 
 // Looks up command metadata by opcode. Returns NULL if not found. This is a
 // linear search, but the command table is small enough that this is fine.
@@ -755,6 +891,13 @@ Y_PUBLIC uint8_t YFDCReadPort(YFDCState* fdc, uint16_t port) {
       return YFDCReadMSRPort(fdc);
     case Y_FDC_PORT_DATA:  // Data Register
       return YFDCReadDataPort(fdc);
+    case Y_FDC_PORT_DIR: {  // Digital Input Register (DIR)
+      const uint8_t selected_drive = fdc->dor & Y_FDC_DOR_DRIVE_SELECT_MASK;
+      return (fdc->drives[selected_drive].is_disk_changed
+                  ? Y_FDC_DIR_DISK_CHANGED
+                  : 0) |
+             Y_FDC_DIR_UNDRIVEN_BITS;
+    }
     default:
       // Per convention for reads from unused/invalid ports.
       return 0xFF;
@@ -865,6 +1008,10 @@ Y_PUBLIC void YFDCWritePort(YFDCState* fdc, uint16_t port, uint8_t value) {
       YFDCWriteDataPort(fdc, value);
       break;
 
+    case Y_FDC_PORT_CCR:  // Configuration Control Register
+      fdc->data_rate = (YFDCDataRate)(value & Y_FDC_CCR_DATA_RATE_MASK);
+      break;
+
     default:
       // Ignore writes to other ports.
       break;
@@ -882,6 +1029,7 @@ Y_PUBLIC void YFDCInsertDisk(
   }
   YFDCDriveState* drive_state = &fdc->drives[drive];
   drive_state->is_present = true;
+  drive_state->is_disk_changed = true;
   drive_state->format = format;
   drive_state->head = 0;
   drive_state->track = 0;
@@ -893,6 +1041,7 @@ Y_PUBLIC void YFDCEjectDisk(YFDCState* fdc, uint8_t drive) {
   }
   YFDCDriveState* drive_state = &fdc->drives[drive];
   drive_state->is_present = false;
+  drive_state->is_disk_changed = true;
   drive_state->format = NULL;
 }
 

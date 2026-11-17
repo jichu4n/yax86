@@ -382,8 +382,7 @@ TEST_F(FDCTest, FormatTrackWithNoDiskIsNotReady) {
   EXPECT_FALSE(dma_requested_);
   EXPECT_TRUE(written_.empty());
   EXPECT_TRUE(irq6_raised_);
-  EXPECT_EQ(
-      ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION | Y_FDC_ST0_NOT_READY);
 }
 
 TEST_F(FDCTest, ReadTrackEnd) {
@@ -783,12 +782,16 @@ TEST_F(FDCTest, SpecifyCommand) {
 }
 
 TEST_F(FDCTest, FindFormatReturnsFormatForKnownSizesOnly) {
-  ASSERT_EQ(Y_FDC_NUM_FORMATS, 2);
+  ASSERT_EQ(Y_FDC_NUM_FORMATS, 4);
   EXPECT_EQ(Y_FDC_FORMAT_360KB_IMAGE_SIZE, 368640);
   EXPECT_EQ(Y_FDC_FORMAT_720KB_IMAGE_SIZE, 737280);
-  EXPECT_EQ(Y_FDC_MAX_IMAGE_SIZE, Y_FDC_FORMAT_720KB_IMAGE_SIZE);
+  EXPECT_EQ(Y_FDC_FORMAT_1200KB_IMAGE_SIZE, 1228800);
+  EXPECT_EQ(Y_FDC_FORMAT_1440KB_IMAGE_SIZE, 1474560);
+  EXPECT_EQ(Y_FDC_MAX_IMAGE_SIZE, Y_FDC_FORMAT_1440KB_IMAGE_SIZE);
   EXPECT_EQ(YFDCFormatImageSizes[0], (uint32_t)Y_FDC_FORMAT_360KB_IMAGE_SIZE);
   EXPECT_EQ(YFDCFormatImageSizes[1], (uint32_t)Y_FDC_FORMAT_720KB_IMAGE_SIZE);
+  EXPECT_EQ(YFDCFormatImageSizes[2], (uint32_t)Y_FDC_FORMAT_1200KB_IMAGE_SIZE);
+  EXPECT_EQ(YFDCFormatImageSizes[3], (uint32_t)Y_FDC_FORMAT_1440KB_IMAGE_SIZE);
 
   const YFDCDiskFormat* format_360 =
       YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE);
@@ -806,12 +809,31 @@ TEST_F(FDCTest, FindFormatReturnsFormatForKnownSizesOnly) {
   EXPECT_EQ(format_720->num_sectors_per_track, 9);
   EXPECT_EQ(format_720->sector_size, 512);
 
+  const YFDCDiskFormat* format_1200 =
+      YFDCFindFormat(Y_FDC_FORMAT_1200KB_IMAGE_SIZE);
+  ASSERT_NE(format_1200, nullptr);
+  EXPECT_EQ(format_1200->num_heads, 2);
+  EXPECT_EQ(format_1200->num_tracks, 80);
+  EXPECT_EQ(format_1200->num_sectors_per_track, 15);
+  EXPECT_EQ(format_1200->sector_size, 512);
+
+  const YFDCDiskFormat* format_1440 =
+      YFDCFindFormat(Y_FDC_FORMAT_1440KB_IMAGE_SIZE);
+  ASSERT_NE(format_1440, nullptr);
+  EXPECT_EQ(format_1440->num_heads, 2);
+  EXPECT_EQ(format_1440->num_tracks, 80);
+  EXPECT_EQ(format_1440->num_sectors_per_track, 18);
+  EXPECT_EQ(format_1440->sector_size, 512);
+
   EXPECT_EQ(YFDCFindFormat(0), nullptr);
   EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE - 1), nullptr);
   EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_360KB_IMAGE_SIZE + 1), nullptr);
   EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_720KB_IMAGE_SIZE - 1), nullptr);
   EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_720KB_IMAGE_SIZE + 1), nullptr);
-  EXPECT_EQ(YFDCFindFormat(1474560), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_1200KB_IMAGE_SIZE - 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_1200KB_IMAGE_SIZE + 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_1440KB_IMAGE_SIZE - 1), nullptr);
+  EXPECT_EQ(YFDCFindFormat(Y_FDC_FORMAT_1440KB_IMAGE_SIZE + 1), nullptr);
 }
 
 TEST_F(FDCTest, ReadData720KBLastSector) {
@@ -940,6 +962,280 @@ TEST_F(FDCTest, FormatIsPerDrive360KBStillRejectsCylinder40) {
   YFDCTick(&fdc_);
   EXPECT_EQ(num_bytes_read_, 1u);
   EXPECT_EQ(first_read_offset_, 40u * 2u * 9u * 512u);
+}
+
+TEST_F(FDCTest, ReadData1200KBLastSector) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_1200KB;
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1200KB);
+  YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, Y_FDC_DATA_RATE_500KBPS);
+  dma_mode_ = kDmaModeRead;
+
+  // Cylinder 79, head 1, sector 15: the last sector of a 1.2MB image.
+  SendCommand(0x46);
+  SendParameter(0x04);  // Head 1, Drive 0
+  SendParameter(79);    // C
+  SendParameter(1);     // H
+  SendParameter(15);    // R
+  SendParameter(0x02);  // N: 512 bytes
+  SendParameter(15);    // EOT
+  SendParameter(0x1B);  // GPL
+  SendParameter(0xFF);  // DTL
+
+  YFDCTick(&fdc_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_EXECUTION);
+  for (int i = 0; i < 512; ++i) {
+    dma_requested_ = false;
+    YFDCTick(&fdc_);
+    EXPECT_TRUE(dma_requested_);
+  }
+  YFDCHandleTC(&fdc_);
+  YFDCTick(&fdc_);
+
+  EXPECT_EQ(num_bytes_read_, 512u);
+  EXPECT_EQ(first_read_offset_, Y_FDC_FORMAT_1200KB_IMAGE_SIZE - 512u);
+  EXPECT_EQ(last_read_offset_, Y_FDC_FORMAT_1200KB_IMAGE_SIZE - 1u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult() & Y_FDC_ST0_INTERRUPT_CODE_MASK, 0x00);
+}
+
+TEST_F(FDCTest, ReadData1440KBLastSector) {
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_1440KB;
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1440KB);
+  YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, Y_FDC_DATA_RATE_500KBPS);
+  dma_mode_ = kDmaModeRead;
+
+  // Cylinder 79, head 1, sector 18: the last sector of a 1.44MB image.
+  SendCommand(0x46);
+  SendParameter(0x04);  // Head 1, Drive 0
+  SendParameter(79);    // C
+  SendParameter(1);     // H
+  SendParameter(18);    // R
+  SendParameter(0x02);  // N: 512 bytes
+  SendParameter(18);    // EOT
+  SendParameter(0x1B);  // GPL
+  SendParameter(0xFF);  // DTL
+
+  YFDCTick(&fdc_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_EXECUTION);
+  for (int i = 0; i < 512; ++i) {
+    dma_requested_ = false;
+    YFDCTick(&fdc_);
+    EXPECT_TRUE(dma_requested_);
+  }
+  YFDCHandleTC(&fdc_);
+  YFDCTick(&fdc_);
+
+  EXPECT_EQ(num_bytes_read_, 512u);
+  EXPECT_EQ(first_read_offset_, Y_FDC_FORMAT_1440KB_IMAGE_SIZE - 512u);
+  EXPECT_EQ(last_read_offset_, Y_FDC_FORMAT_1440KB_IMAGE_SIZE - 1u);
+  EXPECT_TRUE(irq6_raised_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult() & Y_FDC_ST0_INTERRUPT_CODE_MASK, 0x00);
+}
+
+TEST_F(FDCTest, DriveTypeSupportsFormatAndDataRateTable) {
+  struct Case {
+    YFDCDriveType drive_type;
+    const YFDCDiskFormat* format;
+    bool is_supported;
+    YFDCDataRate required_rate;
+  };
+  const Case cases[] = {
+      {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat360KB, true, Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat720KB, false,
+       Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat1200KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_360KB, &YFDCFormat1440KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_720KB, &YFDCFormat360KB, false,
+       Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_720KB, &YFDCFormat720KB, true, Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_720KB, &YFDCFormat1200KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_720KB, &YFDCFormat1440KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_1200KB, &YFDCFormat360KB, true,
+       Y_FDC_DATA_RATE_300KBPS},
+      {Y_FDC_DRIVE_TYPE_1200KB, &YFDCFormat720KB, false,
+       Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_1200KB, &YFDCFormat1200KB, true,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_1200KB, &YFDCFormat1440KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_1440KB, &YFDCFormat360KB, false,
+       Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_1440KB, &YFDCFormat720KB, true,
+       Y_FDC_DATA_RATE_250KBPS},
+      {Y_FDC_DRIVE_TYPE_1440KB, &YFDCFormat1200KB, false,
+       Y_FDC_DATA_RATE_500KBPS},
+      {Y_FDC_DRIVE_TYPE_1440KB, &YFDCFormat1440KB, true,
+       Y_FDC_DATA_RATE_500KBPS},
+  };
+
+  const YFDCDataRate rates[] = {
+      Y_FDC_DATA_RATE_500KBPS,
+      Y_FDC_DATA_RATE_300KBPS,
+      Y_FDC_DATA_RATE_250KBPS,
+      Y_FDC_DATA_RATE_1MBPS,
+  };
+
+  for (const Case& c : cases) {
+    EXPECT_EQ(
+        YFDCDoesDriveTypeSupportFormat(c.drive_type, c.format), c.is_supported);
+    fdc_.config.drive_types[0] = c.drive_type;
+    YFDCInsertDisk(&fdc_, 0, c.format);
+
+    for (YFDCDataRate rate : rates) {
+      YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, rate);
+      irq6_raised_ = false;
+      SendCommand(0x4A);    // Read ID
+      SendParameter(0x00);  // Head 0, Drive 0
+      YFDCTick(&fdc_);
+      ASSERT_TRUE(irq6_raised_);
+      ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+      uint8_t st0 = ReadResult();
+      uint8_t st1 = ReadResult();
+      for (int i = 2; i < 7; ++i) {
+        ReadResult();
+      }
+      if (c.is_supported && rate == c.required_rate) {
+        EXPECT_EQ(st0 & Y_FDC_ST0_INTERRUPT_CODE_MASK, 0x00);
+        EXPECT_EQ(st1, 0x00);
+      } else {
+        EXPECT_EQ(
+            st0 & Y_FDC_ST0_INTERRUPT_CODE_MASK,
+            Y_FDC_ST0_ABNORMAL_TERMINATION);
+        EXPECT_EQ(st1, Y_FDC_ST1_MISSING_ADDRESS_MARK);
+      }
+    }
+  }
+
+  // Read Data, Write Data and Format Track also fail with Missing Address Mark
+  // when the rate does not match.
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_1440KB;
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1440KB);
+  YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, Y_FDC_DATA_RATE_250KBPS);
+
+  StartTransfer(0x46, /*drive=*/0, /*cylinder=*/0, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST1_MISSING_ADDRESS_MARK);
+  for (int i = 2; i < 7; ++i) ReadResult();
+
+  StartTransfer(0x45, /*drive=*/0, /*cylinder=*/0, /*head=*/0, /*sector=*/1);
+  YFDCTick(&fdc_);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST1_MISSING_ADDRESS_MARK);
+  for (int i = 2; i < 7; ++i) ReadResult();
+
+  StartFormat(/*head=*/0, /*sectors=*/18, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST0_ABNORMAL_TERMINATION);
+  EXPECT_EQ(ReadResult(), Y_FDC_ST1_MISSING_ADDRESS_MARK);
+  for (int i = 2; i < 7; ++i) ReadResult();
+}
+
+TEST_F(FDCTest, DiskChangeLineRisesOnInsertAndEjectAndFallsOnStep) {
+  // Select drive 0 in DOR.
+  YFDCWritePort(
+      &fdc_, Y_FDC_PORT_DOR, Y_FDC_DOR_RESET | Y_FDC_DOR_INTERRUPT_ENABLE | 0);
+  EXPECT_EQ(YFDCReadPort(&fdc_, Y_FDC_PORT_DIR), Y_FDC_DIR_UNDRIVEN_BITS);
+
+  // Inserting a disk raises bit 7 of DIR, with bits 6-0 undriven (1).
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1440KB);
+  EXPECT_EQ(
+      YFDCReadPort(&fdc_, Y_FDC_PORT_DIR),
+      Y_FDC_DIR_DISK_CHANGED | Y_FDC_DIR_UNDRIVEN_BITS);
+
+  // Drive 1's change line is independent of drive 0's.
+  YFDCWritePort(
+      &fdc_, Y_FDC_PORT_DOR, Y_FDC_DOR_RESET | Y_FDC_DOR_INTERRUPT_ENABLE | 1);
+  EXPECT_EQ(YFDCReadPort(&fdc_, Y_FDC_PORT_DIR), Y_FDC_DIR_UNDRIVEN_BITS);
+  YFDCWritePort(
+      &fdc_, Y_FDC_PORT_DOR, Y_FDC_DOR_RESET | Y_FDC_DOR_INTERRUPT_ENABLE | 0);
+
+  // A Seek with a disk present clears the change line.
+  SeekDrive0(1);
+  EXPECT_EQ(YFDCReadPort(&fdc_, Y_FDC_PORT_DIR), Y_FDC_DIR_UNDRIVEN_BITS);
+
+  // Ejecting the disk raises the change line again, and seeking an empty drive
+  // does not clear it.
+  YFDCEjectDisk(&fdc_, 0);
+  EXPECT_EQ(
+      YFDCReadPort(&fdc_, Y_FDC_PORT_DIR),
+      Y_FDC_DIR_DISK_CHANGED | Y_FDC_DIR_UNDRIVEN_BITS);
+  SeekDrive0(0);
+  EXPECT_EQ(
+      YFDCReadPort(&fdc_, Y_FDC_PORT_DIR),
+      Y_FDC_DIR_DISK_CHANGED | Y_FDC_DIR_UNDRIVEN_BITS);
+
+  // Inserting a new disk and recalibrating clears the change line.
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1440KB);
+  EXPECT_EQ(
+      YFDCReadPort(&fdc_, Y_FDC_PORT_DIR),
+      Y_FDC_DIR_DISK_CHANGED | Y_FDC_DIR_UNDRIVEN_BITS);
+  SendCommand(0x07);    // Recalibrate
+  SendParameter(0x00);  // Drive 0
+  YFDCTick(&fdc_);
+  YFDCTick(&fdc_);
+  SendCommand(0x08);
+  YFDCTick(&fdc_);
+  ReadResult();
+  ReadResult();
+  EXPECT_EQ(YFDCReadPort(&fdc_, Y_FDC_PORT_DIR), Y_FDC_DIR_UNDRIVEN_BITS);
+}
+
+TEST_F(FDCTest, ReadIDAndFormatTrackOnSingleAndDoubleSteppedMedia) {
+  // Single-stepped: 1.2MB disk in a 1.2MB drive at physical track 24 reports
+  // cylinder 24.
+  fdc_.config.drive_types[0] = Y_FDC_DRIVE_TYPE_1200KB;
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat1200KB);
+  YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, Y_FDC_DATA_RATE_500KBPS);
+  SeekDrive0(24);
+
+  SendCommand(0x4A);    // Read ID
+  SendParameter(0x04);  // Head 1, Drive 0
+  YFDCTick(&fdc_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), 0x04);  // ST0: normal, head 1, drive 0
+  EXPECT_EQ(ReadResult(), 0x00);  // ST1
+  EXPECT_EQ(ReadResult(), 0x00);  // ST2
+  EXPECT_EQ(ReadResult(), 24);    // C
+  EXPECT_EQ(ReadResult(), 1);     // H
+  EXPECT_EQ(ReadResult(), 1);     // R
+  EXPECT_EQ(ReadResult(), 2);     // N
+
+  // Double-stepped: 360KB disk in a 1.2MB drive at physical track 24 reports
+  // disk cylinder 12, and Format Track writes to cylinder 12 of the 360KB
+  // image.
+  YFDCInsertDisk(&fdc_, 0, &YFDCFormat360KB);
+  YFDCWritePort(&fdc_, Y_FDC_PORT_CCR, Y_FDC_DATA_RATE_300KBPS);
+  SeekDrive0(24);
+
+  SendCommand(0x4A);    // Read ID
+  SendParameter(0x00);  // Head 0, Drive 0
+  YFDCTick(&fdc_);
+  ASSERT_EQ(fdc_.phase, Y_FDC_PHASE_RESULT);
+  EXPECT_EQ(ReadResult(), 0x00);  // ST0
+  EXPECT_EQ(ReadResult(), 0x00);  // ST1
+  EXPECT_EQ(ReadResult(), 0x00);  // ST2
+  EXPECT_EQ(ReadResult(), 12);    // C = 24 / 2
+  EXPECT_EQ(ReadResult(), 0);     // H
+  EXPECT_EQ(ReadResult(), 1);     // R
+  EXPECT_EQ(ReadResult(), 2);     // N
+
+  written_.clear();
+  dma_mode_ = kDmaModeWrite;
+  StartFormat(/*head=*/0, /*sectors=*/1, /*fill=*/0xF6);
+  YFDCTick(&fdc_);
+  SendSectorID(/*cylinder=*/12, /*head=*/0, /*sector=*/1, /*tc=*/true);
+
+  const uint32_t cylinder_12_start = 12u * 2u * 9u * 512u;
+  ASSERT_EQ(written_.size(), 512u);
+  EXPECT_EQ(written_.begin()->first, cylinder_12_start);
+  EXPECT_EQ(written_.rbegin()->first, cylinder_12_start + 511u);
 }
 
 }  // namespace

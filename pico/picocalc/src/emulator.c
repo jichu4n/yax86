@@ -394,8 +394,14 @@ static void FormatDiskLine(char* buffer, size_t size) {
   bool is_any_open = false;
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     const DiskImage* image = images[drive];
-    char label[8];
-    snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
+    char label[16];
+    if (drive < kNumVMFloppyDrives) {
+      snprintf(
+          label, sizeof(label), "%s (%s):", kVMDriveLabels[drive],
+          VMConfigFloppyDriveTypeLabel(FloppyGetDriveType((FloppyDrive)drive)));
+    } else {
+      snprintf(label, sizeof(label), "%s:", kVMDriveLabels[drive]);
+    }
     if (image->status == kDiskImageOpen) {
       is_any_open = true;
       length += FormatDrive(buffer + length, size - length, label, image, "");
@@ -610,6 +616,16 @@ static bool InitVM(void) {
   config->vram = g_vram;
   config->video_adapter = VideoAdapter();
   config->num_floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
+  for (uint8_t drive = 0; drive < config->num_floppy_drives; ++drive) {
+    const YFDCDriveType configured_type =
+        g_has_vm ? g_vm->floppy_types[drive] : Y_FDC_DRIVE_TYPE_NONE;
+    const YFDCDriveType drive_type = FloppyGetDriveType((FloppyDrive)drive);
+    config->floppy_drive_types[drive] =
+        configured_type != Y_FDC_DRIVE_TYPE_NONE ||
+                drive_type != Y_FDC_DRIVE_TYPE_360KB
+            ? drive_type
+            : Y_FDC_DRIVE_TYPE_NONE;
+  }
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;
   config->video_text_font.height = kFont4x10Height;
@@ -1178,8 +1194,16 @@ static __noinline void OpenDrives(void) {
       }
     }
   }
+  YFDCDriveType floppy_types[kNumFloppyDrives] = {
+      Y_FDC_DRIVE_TYPE_NONE, Y_FDC_DRIVE_TYPE_NONE};
+  if (g_has_vm) {
+    for (uint8_t floppy = 0; floppy < kNumFloppyDrives; ++floppy) {
+      floppy_types[floppy] = g_vm->floppy_types[floppy];
+    }
+  }
   DiskImageStatus opened[kNumVMDrives];
-  FloppyOpen(&paths[kVMDriveFD1], !g_has_vm, &opened[kVMDriveFD1]);
+  FloppyOpen(
+      &paths[kVMDriveFD1], floppy_types, !g_has_vm, &opened[kVMDriveFD1]);
   HardDiskOpen(&paths[kVMDriveHD1]);
   opened[kVMDriveHD1] = HardDiskGetImage(kHardDisk1)->status;
   opened[kVMDriveHD2] = HardDiskGetImage(kHardDisk2)->status;

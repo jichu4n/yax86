@@ -74,6 +74,7 @@ function(generate_rom_data module rom_file_name output_name symbol)
 endfunction()
 
 generate_rom_data("bios" "GLABIOS_0.2.5_8E.rom" "bios_rom_data" "BIOSROMData")
+generate_rom_data("fdc" "Multi_Floppy_BIOS_2.7.rom" "fdc_option_rom_data" "FDCOptionROMData")
 generate_rom_data("hdc" "XTIDE_Universal_BIOS_XT_r631.rom" "hdc_option_rom_data" "HDCOptionROMData")
 
 # =============================================================================

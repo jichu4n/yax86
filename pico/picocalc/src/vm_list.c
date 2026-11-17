@@ -326,7 +326,8 @@ static bool WriteConfig(
   }
   if (result != FR_OK) {
     Describe("make the disks of", vm, result, problem);
-  } else if (VMConfigSave(vm, g_paths, video_adapter, problem)) {
+  } else if (
+      VMConfigSave(vm, g_paths, drives->floppy_types, video_adapter, problem)) {
     return true;
   }
   for (uint8_t drive = 0; drive < written; ++drive) {
