@@ -8,8 +8,14 @@
 
 #include "screen.h"
 
+enum {
+  // Longest label VMMemoryFormat() produces ("640K (paged)", 12 characters),
+  // with room for any uint16_t.
+  kVMMemoryLabelLength = 23,
+};
+
 // Format memory_kb as "<N>K", or "<N>K (paged)" when it exceeds
-// kPicoGuestSRAMSize on this board.
+// kPicoGuestSRAMSize on this board (regardless of whether the PSRAM is up).
 void VMMemoryFormat(uint16_t memory_kb, char* buffer, size_t size);
 
 // Show the memory sizes, with the preset matching or closest to *chosen

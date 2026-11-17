@@ -15,7 +15,6 @@ static const uint16_t kPresets[] = {
 
 enum {
   kNumPresets = sizeof(kPresets) / sizeof(kPresets[0]),
-  kLabelSize = 24,
 };
 
 extern const Screen kVMMemoryScreen;
@@ -67,7 +66,7 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(DisplayBox* box) {
-  char labels[kNumPresets][kLabelSize];
+  char labels[kNumPresets][kVMMemoryLabelLength + 1];
   BoxItem items[kNumPresets];
   for (uint8_t i = 0; i < kNumPresets; ++i) {
     VMMemoryFormat(kPresets[i], labels[i], sizeof(labels[i]));

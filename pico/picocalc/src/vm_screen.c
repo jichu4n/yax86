@@ -128,7 +128,7 @@ static void OnDraw(DisplayBox* box) {
     line_pointers[0] = "Its vm.cfg has a problem.";
     num_lines = 1;
   } else {
-    char memory[24];
+    char memory[kVMMemoryLabelLength + 1];
     VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
     snprintf(
         lines[num_lines], sizeof(lines[num_lines]), "Memory: %-8s  Video: %s",

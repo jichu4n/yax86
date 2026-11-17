@@ -283,7 +283,7 @@ static void OnDraw(DisplayBox* box) {
         rows[item], sizeof(rows[item]), "%-15s %s", kVMDriveNames[drive], what);
     items[item] = (BoxItem){rows[item], true};
   }
-  char memory[24];
+  char memory[kVMMemoryLabelLength + 1];
   VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
   snprintf(
       rows[kFormMemory], sizeof(rows[kFormMemory]), "%-15s %s", "Memory",

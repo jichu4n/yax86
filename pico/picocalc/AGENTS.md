@@ -596,21 +596,21 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   Memory - `128K`, `256K`, `384K`, `512K` or `640K`, with `(paged)` on sizes
   above `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter -
   `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
-  hard disks 1 and 2, and Create. Floppy disk 1 is Empty, New floppy image (360KB), New
-  floppy image (720KB), or Existing floppy image, a 360KB or 720KB image from
-  the browser; floppy disk 2 is Disabled or any of those; and a hard disk is
-  Disabled, New disk image (10MB), or Existing disk image, a 10MB one. A new VM
-  starts with `640K`, `CGA`, floppy disk 1 empty, floppy disk 2 and hard disk 2
-  disabled, and a new disk image as hard disk 1. An existing image is shared,
-  like any image outside the VM's folder. A floppy drive with no disk is
-  "empty" wherever the menu says what a drive holds, as the status rows have
-  it. Backspace on the form only ever erases the name - Esc leaves it - so that
-  a press meant for the name does not throw the form away. One image in two
-  drives is refused before anything is written. Create writes `vm.cfg` with the
-  drives there, as paths relative to it, and `video_adapter` and `memory_kb`
-  from a `VMMachine` in one `ConfigFileUpdate()` through `VMConfigSave()`,
-  which removes the line of a drive left out and a line left with nothing else
-  on it.
+  hard disks 1 and 2, and Create. Floppy disk 1 is Empty, New floppy image
+  (360KB), New floppy image (720KB), or Existing floppy image, a 360KB or 720KB
+  image from the browser; floppy disk 2 is Disabled or any of those; and a hard
+  disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB one.
+  A new VM starts with `640K`, `CGA`, floppy disk 1 empty, floppy disk 2 and
+  hard disk 2 disabled, and a new disk image as hard disk 1. An existing image
+  is shared, like any image outside the VM's folder. A floppy drive with no
+  disk is "empty" wherever the menu says what a drive holds, as the status rows
+  have it. Backspace on the form only ever erases the name - Esc leaves it - so
+  that a press meant for the name does not throw the form away. One image in
+  two drives is refused before anything is written. Create writes `vm.cfg` with
+  the drives there, as paths relative to it, and `video_adapter` and
+  `memory_kb` from a `VMMachine` in one `ConfigFileUpdate()` through
+  `VMConfigSave()`, which removes the line of a drive left out and a line left
+  with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
   for both, starting from its memory size, video adapter and drives as its
   `vm.cfg` has them, with no name and Save for Create; a hand-edited valid
