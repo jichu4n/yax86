@@ -54,10 +54,12 @@ typedef struct VMListContents {
 
 // What a VM's drives are to hold: each an image, a path from the card's root
 // or empty for none, or NULL for floppy disk 2 left out of the machine - or a
-// new blank disk of the VM's own, sized in bytes (0 if not a new blank disk).
+// new blank disk of the VM's own, sized in bytes (0 if not a new blank disk) -
+// and each floppy drive's mechanism type.
 typedef struct VMListDrives {
   const char* paths[kNumVMDrives];
   uint32_t blank_sizes[kNumVMDrives];
+  YFDCDriveType floppy_types[kNumVMFloppyDrives];
 } VMListDrives;
 
 // How making, renaming or cloning a VM went.
@@ -89,10 +91,10 @@ VMListResult VMListRename(
 // Make a new VM, name: its folder, with a vm.cfg naming its drives and machine
 // settings, and its blank disks, written through transfer's buffer, calling its
 // progress as it goes. A blank disk is zeros, unformatted as a new disk was,
-// for DOS's FORMAT - and for a hard disk, FDISK first: a 360KB or 720KB floppy
-// for drive A or B, `fd1.img` or `fd2.img`, and the core's 10MB hard disk for
-// hard disk 1 or 2, `hd1.img` or `hd2.img` - or `fd1_2.img`, `hd1_2.img` and
-// on, if the name is taken.
+// for DOS's FORMAT - and for a hard disk, FDISK first: a 360KB, 720KB, 1.2MB
+// or 1.44MB floppy for drive A or B, `fd1.img` or `fd2.img`, and the core's
+// 10MB hard disk for hard disk 1 or 2, `hd1.img` or `hd2.img` - or
+// `fd1_2.img`, `hd1_2.img` and on, if the name is taken.
 // One image in two drives is refused. created is the new VM. Anything but
 // kVMListDone comes with the problem described, as for VMListRename(); a
 // VM that could not be made has what was made of it deleted.

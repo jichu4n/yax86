@@ -12,6 +12,8 @@ enum {
 };
 
 static DiskImage g_images[kNumFloppyDrives];
+// The configured mechanism type of each drive.
+static YFDCDriveType g_drive_types[kNumFloppyDrives];
 // The format of the disk in each drive, or NULL when empty.
 static const YFDCDiskFormat* g_formats[kNumFloppyDrives];
 // The paths of the images, which the images point to.
@@ -24,16 +26,30 @@ static DiskImageStatus OpenDriveImage(FloppyDrive drive, const char* path) {
   DiskImage* image = &g_images[drive];
   const DiskImageStatus status = DiskImageOpenSizes(
       image, g_inserted_paths[drive], YFDCFormatImageSizes, Y_FDC_NUM_FORMATS);
-  g_formats[drive] =
-      status == kDiskImageOpen ? YFDCFindFormat(image->size) : NULL;
-  return status;
+  if (status != kDiskImageOpen) {
+    g_formats[drive] = NULL;
+    return status;
+  }
+  const YFDCDiskFormat* format = YFDCFindFormat(image->size);
+  if (!YFDCDoesDriveTypeSupportFormat(g_drive_types[drive], format)) {
+    DiskImageClose(image);
+    image->status = kDiskImageIncompatibleDrive;
+    g_formats[drive] = NULL;
+    return kDiskImageIncompatibleDrive;
+  }
+  g_formats[drive] = format;
+  return kDiskImageOpen;
 }
 
 void FloppyOpen(
-    const char* const paths[kNumFloppyDrives], bool is_built_in,
+    const char* const paths[kNumFloppyDrives],
+    const YFDCDriveType drive_types[kNumFloppyDrives], bool is_built_in,
     DiskImageStatus opened[kNumFloppyDrives]) {
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {
     DiskImage* image = &g_images[drive];
+    g_drive_types[drive] = drive_types[drive] != Y_FDC_DRIVE_TYPE_NONE
+                               ? drive_types[drive]
+                               : Y_FDC_DRIVE_TYPE_360KB;
     g_formats[drive] = NULL;
     if (paths[drive] == NULL || paths[drive][0] == '\0') {
       image->status = kDiskImageEjected;
@@ -59,6 +75,10 @@ void FloppyOpen(
 }
 
 const DiskImage* FloppyGetImage(FloppyDrive drive) { return &g_images[drive]; }
+
+YFDCDriveType FloppyGetDriveType(FloppyDrive drive) {
+  return g_drive_types[drive];
+}
 
 FloppyDrive FloppyDriveHolding(const char* path) {
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {

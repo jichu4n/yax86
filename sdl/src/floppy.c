@@ -1,6 +1,7 @@
 #include "floppy.h"
 
 #include <stdio.h>
+#include <strings.h>
 
 #include "app_log.h"
 
@@ -48,7 +49,7 @@ bool FloppyMount(YPlatformState* platform, const char* path) {
   const YFDCDiskFormat* format =
       is_complete ? YFDCFindFormat((uint32_t)bytes_read) : NULL;
   if (!format) {
-    char expected[32];
+    char expected[64];
     size_t pos = 0;
     for (uint8_t i = 0; i < Y_FDC_NUM_FORMATS && pos < sizeof(expected); ++i) {
       const int n = snprintf(
@@ -63,10 +64,37 @@ bool FloppyMount(YPlatformState* platform, const char* path) {
         Y_LOG_STRING("expected_bytes", expected));
     return false;
   }
+  if (!YFDCDoesDriveTypeSupportFormat(
+          platform->fdc.config.drive_types[0], format)) {
+    APP_ERROR(
+        "floppy_incompatible_drive_type", Y_LOG_STRING("path", path),
+        Y_LOG_UINT("bytes", (uint32_t)bytes_read));
+    return false;
+  }
 
   g_floppy_image_size = (uint32_t)bytes_read;
   platform->fdc.config.read_image_byte = FloppyReadByte;
   platform->fdc.config.write_image_byte = FloppyWriteByte;
   YFDCInsertDisk(&platform->fdc, 0, format);
   return true;
+}
+
+bool FloppyParseDriveType(const char* value, YFDCDriveType* drive_type) {
+  if (strcasecmp(value, "360k") == 0 || strcasecmp(value, "360kb") == 0) {
+    *drive_type = Y_FDC_DRIVE_TYPE_360KB;
+    return true;
+  }
+  if (strcasecmp(value, "720k") == 0 || strcasecmp(value, "720kb") == 0) {
+    *drive_type = Y_FDC_DRIVE_TYPE_720KB;
+    return true;
+  }
+  if (strcasecmp(value, "1.2m") == 0 || strcasecmp(value, "1.2mb") == 0) {
+    *drive_type = Y_FDC_DRIVE_TYPE_1200KB;
+    return true;
+  }
+  if (strcasecmp(value, "1.44m") == 0 || strcasecmp(value, "1.44mb") == 0) {
+    *drive_type = Y_FDC_DRIVE_TYPE_1440KB;
+    return true;
+  }
+  return false;
 }

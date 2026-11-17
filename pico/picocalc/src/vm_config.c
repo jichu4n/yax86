@@ -35,6 +35,23 @@ static const char* const kDriveKeys[kNumVMDrives] = {
     [kVMDriveHD2] = "hd2",
 };
 
+static const char* const kFloppyDriveTypeKeys[kNumVMFloppyDrives] = {
+    [kVMDriveFD1] = "fd1_type",
+    [kVMDriveFD2] = "fd2_type",
+};
+
+static const char* const kFloppyDriveTypeNames[Y_FDC_NUM_DRIVE_TYPES] = {
+    [Y_FDC_DRIVE_TYPE_NONE] = "360k",    [Y_FDC_DRIVE_TYPE_360KB] = "360k",
+    [Y_FDC_DRIVE_TYPE_720KB] = "720k",   [Y_FDC_DRIVE_TYPE_1200KB] = "1.2m",
+    [Y_FDC_DRIVE_TYPE_1440KB] = "1.44m",
+};
+
+static const char* const kFloppyDriveTypeLabels[Y_FDC_NUM_DRIVE_TYPES] = {
+    [Y_FDC_DRIVE_TYPE_NONE] = "360KB",    [Y_FDC_DRIVE_TYPE_360KB] = "360KB",
+    [Y_FDC_DRIVE_TYPE_720KB] = "720KB",   [Y_FDC_DRIVE_TYPE_1200KB] = "1.2MB",
+    [Y_FDC_DRIVE_TYPE_1440KB] = "1.44MB",
+};
+
 static const char* const kVideoAdapterNames[Y_VIDEO_NUM_ADAPTERS] = {
     [Y_VIDEO_ADAPTER_MDA] = "mda",
     [Y_VIDEO_ADAPTER_CGA] = "cga",
@@ -44,6 +61,26 @@ static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
     [Y_VIDEO_ADAPTER_MDA] = "MDA",
     [Y_VIDEO_ADAPTER_CGA] = "CGA",
 };
+
+const char* VMConfigFloppyDriveTypeName(YFDCDriveType type) {
+  return kFloppyDriveTypeNames
+      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
+}
+
+const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type) {
+  return kFloppyDriveTypeLabels
+      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
+}
+
+static bool FloppyDriveTypeFromName(const char* name, YFDCDriveType* type) {
+  for (uint8_t i = Y_FDC_DRIVE_TYPE_360KB; i < Y_FDC_NUM_DRIVE_TYPES; ++i) {
+    if (strcasecmp(name, kFloppyDriveTypeNames[i]) == 0) {
+      *type = (YFDCDriveType)i;
+      return true;
+    }
+  }
+  return false;
+}
 
 const char* VMConfigVideoAdapterName(YVideoAdapter adapter) {
   return kVideoAdapterNames
@@ -106,6 +143,18 @@ static bool TakeVMPair(
     }
     return true;
   }
+  for (uint8_t floppy = 0; floppy < kNumVMFloppyDrives; ++floppy) {
+    if (strcmp(key, kFloppyDriveTypeKeys[floppy]) == 0) {
+      if (!FloppyDriveTypeFromName(value, &config->floppy_types[floppy])) {
+        snprintf(
+            problem, kVMProblemLength + 1,
+            "%s is not 360k, 720k, 1.2m or 1.44m", key);
+        return false;
+      }
+      config->is_present[floppy] = true;
+      return true;
+    }
+  }
   if (strcmp(key, kMemoryKBKey) == 0) {
     uint64_t memory_kb = 0;
     if (!YLogfmtParseUInt(value, &memory_kb) || memory_kb < kVMMinMemoryKB ||
@@ -147,6 +196,9 @@ bool VMConfigRead(
     config->drives[drive][0] = '\0';
     config->is_present[drive] = false;
   }
+  for (uint8_t floppy = 0; floppy < kNumVMFloppyDrives; ++floppy) {
+    config->floppy_types[floppy] = Y_FDC_DRIVE_TYPE_360KB;
+  }
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->memory_kb = kVMDefaultMemoryKB;
   VMReading reading = {.config = config};
@@ -173,6 +225,7 @@ bool VMConfigSaveDrive(
 
 bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
+    const YFDCDriveType floppy_types[kNumVMFloppyDrives],
     const VMMachine* machine, char problem[kVMProblemLength + 1]) {
   // Kept off the stack, with ConfigFileUpdate() under them.
   static char values[kNumVMDrives][kFSMaxPath + 2];
@@ -180,7 +233,7 @@ bool VMConfigSave(
   FSFolderOf(vm->path, folder);
   char memory_kb[8];
   snprintf(memory_kb, sizeof(memory_kb), "%u", (unsigned)machine->memory_kb);
-  ConfigFileSetting settings[kNumVMDrives + 2];
+  ConfigFileSetting settings[kNumVMDrives + kNumVMFloppyDrives + 2];
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     values[drive][0] = '\0';
     if (drives[drive] != NULL && drives[drive][0] != '\0' &&
@@ -192,11 +245,19 @@ bool VMConfigSave(
     settings[drive].key = kDriveKeys[drive];
     settings[drive].value = drives[drive] != NULL ? values[drive] : NULL;
   }
-  settings[kNumVMDrives] = (ConfigFileSetting){
+  for (uint8_t floppy = 0; floppy < kNumVMFloppyDrives; ++floppy) {
+    settings[kNumVMDrives + floppy] = (ConfigFileSetting){
+        .key = kFloppyDriveTypeKeys[floppy],
+        .value = drives[floppy] != NULL
+                     ? VMConfigFloppyDriveTypeName(floppy_types[floppy])
+                     : NULL,
+    };
+  }
+  settings[kNumVMDrives + kNumVMFloppyDrives] = (ConfigFileSetting){
       .key = kVideoAdapterKey,
       .value = VMConfigVideoAdapterName(machine->video_adapter),
   };
-  settings[kNumVMDrives + 1] = (ConfigFileSetting){
+  settings[kNumVMDrives + kNumVMFloppyDrives + 1] = (ConfigFileSetting){
       .key = kMemoryKBKey,
       .value = memory_kb,
   };

@@ -1,5 +1,5 @@
 {
   "requires": ["util"],
   "public": ["public.h"],
-  "private": ["fdc.c"]
+  "private": ["fdc_option_rom_data.h", "fdc_option_rom_data.c", "fdc.c"]
 }

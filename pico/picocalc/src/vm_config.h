@@ -5,6 +5,7 @@
 // vm_list.h, and the card's own settings in settings.h.
 //
 //   fd1=../../images/msdos330/disk01.img
+//   fd1_type=360k
 //   hd1=hd1.img
 //   hd2=/shared/tools.img
 //   video_adapter=mda
@@ -16,10 +17,12 @@
 // in it. Floppy disk 2 not named is not there - the BIOS reports one floppy
 // drive, and DOS's B: is drive A by another name - and named as fd2="" it is
 // a drive with no disk. A hard disk not named, or named as "", is not there:
-// a hard disk with no image is no disk at all. Floppy images are 360KB or
-// 720KB and hard disk images the core's 10MB drive. video_adapter is cga or
-// mda, and cga when not named. memory_kb is a multiple of 16 from 64 to 640,
-// and 640 when not named. Keys this firmware does not know are skipped.
+// a hard disk with no image is no disk at all. Floppy images are 360KB,
+// 720KB, 1.2MB or 1.44MB, checked against fd1_type and fd2_type (360k, 720k,
+// 1.2m or 1.44m, and 360k when not named), and hard disk images the core's
+// 10MB drive. video_adapter is cga or mda, and cga when not named. memory_kb
+// is a multiple of 16 from 64 to 640, and 640 when not named. Keys this
+// firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -27,6 +30,7 @@
 #include <stdint.h>
 
 #include "config_file.h"
+#include "core/fdc.h"
 #include "core/platform.h"
 #include "core/video.h"
 #include "fs.h"
@@ -42,6 +46,7 @@ enum {
   kVMDriveHD1,
   kVMDriveHD2,
   kNumVMDrives,
+  kNumVMFloppyDrives = 2,
 
   // Conventional memory in KB: 64 to 640 in 16KB steps, the granularity
   // GLaBIOS probes at, and 640 when not named.
@@ -86,11 +91,20 @@ typedef struct VMConfig {
   // Whether the file names each drive, even as empty. Floppy disk 2 is there
   // only if it does; a hard disk not named is empty either way.
   bool is_present[kNumVMDrives];
+  // Each floppy drive's mechanism type: Y_FDC_DRIVE_TYPE_360KB when not named
+  // in the file.
+  YFDCDriveType floppy_types[kNumVMFloppyDrives];
   // The VM's video adapter: Y_VIDEO_ADAPTER_CGA when not named.
   YVideoAdapter video_adapter;
   // The VM's conventional memory in KB: kVMDefaultMemoryKB when not named.
   uint16_t memory_kb;
 } VMConfig;
+
+// A floppy drive type's name in vm.cfg and the report (360k, 720k, 1.2m,
+// 1.44m), and its label in the menu and on the status page (360KB, 720KB,
+// 1.2MB, 1.44MB).
+const char* VMConfigFloppyDriveTypeName(YFDCDriveType type);
+const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type);
 
 // The video adapter's name in vm.cfg and the report (cga, mda), and its label
 // in the menu and on the status page (CGA, MDA).
@@ -111,11 +125,14 @@ bool VMConfigRead(
 // Write a VM's configuration to its file, as VMConfigSaveDrive() writes one
 // drive, making the file if there is none. Each drive is a path from the
 // card's root, empty for none, or NULL for a drive not there, whose line is
-// removed; video_adapter, as cga or mda, and memory_kb are always written.
-// Returns false, with the problem described, if a path would be too long or
-// the file could not be written.
+// removed; each present floppy drive's type is written (as 360k, 720k, 1.2m or
+// 1.44m, and removed when floppy disk 2 is not there); and video_adapter, as
+// cga or mda, and memory_kb are always written. Returns false, with the
+// problem described, if a path would be too long or the file could not be
+// written.
 bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
+    const YFDCDriveType floppy_types[kNumVMFloppyDrives],
     const VMMachine* machine, char problem[kVMProblemLength + 1]);
 
 // Save the image in a VM's drive, a path from the card's root or NULL or

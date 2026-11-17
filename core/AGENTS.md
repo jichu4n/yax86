@@ -21,7 +21,6 @@ visibility, and how performance work is measured - are in the root
   does not pay twice. Every module's state is a field of `YPlatformState`, so
   **a host must zero its `YPlatformState`** - `static YPlatformState
   platform;` or `= {0}` - or every module comes up with garbage.
-  `YFDCInit()` is empty, kept so every module is brought up alike.
 - **A reset is not an init.** `YDMAWritePort()`'s master reset clears the
   controller's state, but saves and restores the config across it: the reset
   is the chip's, and the config is what the host wired up. The DMA tests
@@ -268,27 +267,70 @@ visibility, and how performance work is measured - are in the root
 
 ## fdc - the floppy controller
 
-- **Two formats, 360KB (`YFDCFormat360KB`, 40 tracks) and 720KB
-  (`YFDCFormat720KB`, 80 tracks)**, both 2 heads and 9 sectors of 512 bytes a
-  track (368,640 and 737,280 bytes) at 250kbps double density, so the stock XT
-  controller reads and writes both without a data rate register or disk change
-  line. Hosts pick the format from the image's byte size with
-  `YFDCFindFormat()` and list accepted sizes from `YFDCFormatImageSizes`
-  (`Y_FDC_NUM_FORMATS`, largest `Y_FDC_MAX_IMAGE_SIZE`); any drive takes either
+- **Four formats: 360KB (`YFDCFormat360KB`, 40 tracks, 9 sectors), 720KB
+  (`YFDCFormat720KB`, 80 tracks, 9 sectors), 1.2MB (`YFDCFormat1200KB`, 80
+  tracks, 15 sectors) and 1.44MB (`YFDCFormat1440KB`, 80 tracks, 18
+  sectors)**, all 2 heads and 512 bytes a sector (368,640, 737,280, 1,228,800
+  and 1,474,560 bytes). Hosts pick the format from the image's byte size with
+  `YFDCFindFormat()`, which walks `YFDCFormats`, and list accepted sizes from
+  `YFDCFormatImageSizes` (`Y_FDC_NUM_FORMATS`, largest `Y_FDC_MAX_IMAGE_SIZE`);
+  `YFDCDoesDriveTypeSupportFormat()` checks whether a drive mechanism accepts a
   format.
-- **GLaBIOS has no `INT 13h AH=08h` (drive parameters)**, and passes cylinders
-  0-79 straight to the controller. MS-DOS 3.30 reads, writes and boots a
-  formatted 720KB image in either drive with no `CONFIG.SYS`, taking the
-  80-track geometry from the boot sector's BPB (`CHKDSK` reports 730,112
-  bytes). Formatting a blank 720KB image from DOS needs
-  `DEVICE=DRIVER.SYS /D:1 /F:2` (or `/D:0` for drive A) in `CONFIG.SYS`, which
-  adds a new drive letter, and `FORMAT <letter>:` (or `/S`) on that letter
-  without `/T` or `/N`: MS-DOS 3.30 does not recognize `DRIVPARM`, and its
-  `FORMAT` rejects `/T:80 /N:9` on both 360KB and `DRIVER.SYS` 720KB drives.
+- **Per-drive mechanism types (`YFDCDriveType`, values 1-4 matching PC/AT CMOS
+  codes) and data rates (`YFDCDataRate`)**: a `360KB` drive takes `360KB` disks
+  at 250kbps; a `720KB` drive takes `720KB` at 250kbps; a `1.2MB` drive takes
+  `360KB` at 300kbps (double-stepped) and `1.2MB` at 500kbps; and a `1.44MB`
+  drive takes `720KB` at 250kbps and `1.44MB` at 500kbps. `Y_FDC_DRIVE_TYPE_NONE`
+  (`0`, the zero-initialized default) marks an absent drive in the option ROM's
+  configuration block; `YPlatformInit()` maps a zero-initialized
+  `floppy_drive_types[i]` on a present drive (`i < num_floppy_drives`) to
+  `Y_FDC_DRIVE_TYPE_360KB` (`1`) and sets `i >= num_floppy_drives` to
+  `Y_FDC_DRIVE_TYPE_NONE`, and `YFDCDoesDriveTypeSupportFormat()` treats `0` as
+  a `360KB` drive. Writing port `0x3F7` (CCR) sets the active data rate
+  (`0 = 500kbps`, `1 = 300kbps`, `2 = 250kbps`, `3 = 1Mbps`, initialized to
+  `250kbps` by `YFDCInit()`); Read Data, Write Data, Read ID and Format Track at
+  the wrong rate for the drive and disk fail with
+  `Y_FDC_ST0_ABNORMAL_TERMINATION` and `Y_FDC_ST1_MISSING_ADDRESS_MARK`, which
+  is how the option ROM's media-rate probe identifies the disk in the drive.
+  Reading port `0x3F7` (DIR) returns the selected drive's disk-change line in
+  bit 7 (`Y_FDC_DIR_DISK_CHANGED`, with bits 6-0 undriven as `0x7F`), raised by
+  `YFDCInsertDisk()` and `YFDCEjectDisk()` and cleared by `Seek` or
+  `Recalibrate` while a disk is in the drive.
+- **Floppy BIOS support comes from an option ROM, always mapped at `0xCC000`**:
+  Sergey Kiselev's Multi-Floppy BIOS Extension 2.7
+  (`core/src/fdc/Multi_Floppy_BIOS_2.7.rom`, built from `skiselev/floppy_bios`
+  by `tools/build-fdc-option-rom.sh` and checked against its SHA-256), compiled
+  in and mapped at `0xCC000-0xCDFFF` (clear of the XTIDE ROM at `0xC8000-0xCAFFF`
+  and aligned to the memory map's 4KB pages). GLaBIOS is an 8KB PC/XT BIOS with
+  no `INT 13h AH=08h/15h/16h/17h/18h`, data-rate probing, disk-change handling
+  or double stepping, whereas the option ROM hooks `INT 13h` and `INT 1Eh` for
+  all of them; mapping it unconditionally gives every machine one floppy BIOS
+  path, so a `360KB` drive works alongside a high-density drive and MS-DOS
+  3.30's `FORMAT` works directly on every supported drive and media combination
+  (`FORMAT B:` on a `720KB` drive with no `CONFIG.SYS`, `FORMAT B: /4` for
+  `360KB` in a `1.2MB` drive, `FORMAT B: /T:80 /N:9` for `720KB` in a `1.44MB`
+  drive). Its 64-byte configuration block at offset `0x1FC0` is built once in
+  `fdc->option_rom_config` by `YFDCInit()` from `fdc->config.drive_types`, with
+  the boot F2 prompt cleared and byte `0x1FC0` checksummed so the 64-byte block
+  sums to `0` (`mod 256`). The first 4KB page (`0xCC000-0xCCFFF`,
+  `Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM`) is mapped with `.read_data =
+  YFDCGetOptionROMData()` so the CPU's instruction fetch window indexes it
+  directly, and only the second 4KB page (`0xCD000-0xCDFFF`,
+  `Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM_CONFIG`), which holds the config
+  block at `0x1FC0`, goes through `.read_byte_fn` (`YFDCReadOptionROMByte()`) -
+  1.20% faster on `dos-boot` (6.4191s against 6.4972s at 250MHz, `-O3`) than
+  routing the whole 8KB through `.read_byte_fn`.
+- **Read ID (`0x0A`) and Format Track (`0x0D`) map an 80-track 1.2MB drive's
+  physical head position (`drive->track`) to a 40-track 360KB image's cylinder
+  with `drive->track >> 1` (`YFDCDiskCylinderForDrive()`)**: when the option
+  ROM accesses a 360KB disk in a 1.2MB drive at 300kbps, it double-steps
+  `Seek` to physical tracks `0, 2, ..., 78` while passing logical cylinder
+  `0..39` in Read/Write Data's command bytes; Read ID and Format Track have no
+  cylinder command byte and address the track under the head.
 - **Format Track fills a track's sectors from the IDs the guest gives it**,
   four bytes a sector by DMA: cylinder, head, sector number and size code.
   An image holds the standard layout and nothing else, so a sector is
-  written where the image keeps the sector its ID numbers, on the track the
+  written where the image keeps the sector its ID numbers, on the cylinder the
   head is over and the head the command names; the ID's cylinder and head
   are only reported back. A sector numbered past the track is left alone.
   With it DOS's FORMAT formats an image of zeros, `/S` included.

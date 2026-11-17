@@ -184,6 +184,7 @@ int main(int argc, char* argv[]) {
   YLoggerInit(&g_app_logger, &g_logger_config);
 
   const char* floppy_path = kDefaultFloppyImagePath;
+  YFDCDriveType floppy_drive_type = Y_FDC_DRIVE_TYPE_360KB;
   // The machine has a hard disk unless asked otherwise. Under Emscripten there
   // is no command line at all, so anything gated behind a flag would be
   // unreachable in the browser.
@@ -195,6 +196,17 @@ int main(int argc, char* argv[]) {
       g_video_adapter = Y_VIDEO_ADAPTER_CGA;
     } else if (strcmp(argv[i], "--mda") == 0) {
       g_video_adapter = Y_VIDEO_ADAPTER_MDA;
+    } else if (strcmp(argv[i], "--fd-type") == 0 && i + 1 < argc) {
+      const char* value = argv[++i];
+      if (!FloppyParseDriveType(value, &floppy_drive_type)) {
+        APP_ERROR("invalid_floppy_drive_type", Y_LOG_STRING("type", value));
+        fprintf(
+            stderr,
+            "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m "
+            "(default: 360k)] [--mda|--cga] [--hdd [image]] [--no-hdd]\n",
+            argv[0]);
+        return 1;
+      }
     } else if (strcmp(argv[i], "--hdd") == 0) {
       attach_hard_disk = true;
       // An image path may follow, but --hdd on its own is a blank disk.
@@ -207,8 +219,8 @@ int main(int argc, char* argv[]) {
       APP_ERROR("unknown_option", Y_LOG_STRING("option", argv[i]));
       fprintf(
           stderr,
-          "Usage: %s [floppy image] [--mda|--cga] [--hdd [image]] "
-          "[--no-hdd]\n",
+          "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m "
+          "(default: 360k)] [--mda|--cga] [--hdd [image]] [--no-hdd]\n",
           argv[0]);
       return 1;
     } else {
@@ -246,6 +258,7 @@ int main(int argc, char* argv[]) {
     config->set_pc_speaker_frequency = MainSetPCSpeakerFrequency;
   }
   config->video_adapter = g_video_adapter;
+  config->floppy_drive_types[0] = floppy_drive_type;
 
   if (!YPlatformInit(&g_platform)) {
     APP_ERROR("platform_init_failed");

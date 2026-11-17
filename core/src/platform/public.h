@@ -49,6 +49,10 @@ enum {
   Y_PLATFORM_MEMORY_MAP_ENTRY_BIOS_ROM = 0x01,
   // HDC option ROM - mapped starting at 0xC8000.
   Y_PLATFORM_MEMORY_MAP_ENTRY_HDC_OPTION_ROM = 0x0C,
+  // FDC option ROM - mapped at 0xCC000-0xCCFFF (direct read) and
+  // 0xCD000-0xCDFFF (with the 64-byte configuration block at 0x1FC0).
+  Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM = 0x0D,
+  Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM_CONFIG = 0x0E,
   // Paged conventional memory: the part above direct_memory_size, when
   // YPlatformConfig.paged_memory is set.
   Y_PLATFORM_MEMORY_MAP_ENTRY_PAGED_MEMORY = 0x02,
@@ -370,8 +374,15 @@ typedef struct YPlatformConfig {
   YVideoAdapter video_adapter;
 
   // The number of floppy drives, 1 to 4, which the PPI's DIP switches report
-  // to the BIOS. 0, the default, is taken as 1.
+  // to the BIOS. 0, the default, is 1.
   uint8_t num_floppy_drives;
+
+  // Type of each floppy drive's mechanism, placed in the Multi-Floppy BIOS
+  // Extension option ROM's configuration block at 0xCC000. Any present drive
+  // left at Y_FDC_DRIVE_TYPE_NONE (0, the default) is configured as
+  // Y_FDC_DRIVE_TYPE_360KB, and drives beyond num_floppy_drives are marked
+  // absent (0).
+  YFDCDriveType floppy_drive_types[Y_FDC_NUM_DRIVES];
 
   // Conventional memory that the CPU reads and writes directly, through its
   // direct data window: direct_memory_size bytes from address 0. Required

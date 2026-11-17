@@ -45,4 +45,88 @@ TEST_F(PlatformFloppyDrivesTest, TwoDrives) {
   EXPECT_EQ(ReportedDrives(), 2);
 }
 
+TEST_F(
+    PlatformFloppyDrivesTest,
+    UnsetDriveTypesMapsFloppyOptionROMWithDefault360KBDrive0) {
+  Init(0);
+  EXPECT_EQ(ReportedDrives(), 1);
+  const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(
+      YPlatformReadMemoryWord(&platform_, Y_FDC_OPTION_ROM_START_ADDRESS),
+      0xAA55);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(
+          &platform_,
+          Y_FDC_OPTION_ROM_START_ADDRESS + Y_FDC_OPTION_ROM_CONFIG_OFFSET + 1),
+      Y_FDC_DRIVE_TYPE_360KB);
+  for (uint32_t drive = 1; drive < Y_FDC_NUM_DRIVES; ++drive) {
+    EXPECT_EQ(
+        YPlatformReadMemoryByte(
+            &platform_, Y_FDC_OPTION_ROM_START_ADDRESS +
+                            Y_FDC_OPTION_ROM_CONFIG_OFFSET + 1 + drive * 4),
+        Y_FDC_DRIVE_TYPE_NONE);
+  }
+}
+
+TEST_F(PlatformFloppyDrivesTest, ConfiguredDriveTypesMapsValidFloppyOptionROM) {
+  platform_.config.floppy_drive_types[0] = Y_FDC_DRIVE_TYPE_1440KB;
+  platform_.config.floppy_drive_types[1] = Y_FDC_DRIVE_TYPE_1200KB;
+  Init(2);
+
+  EXPECT_EQ(ReportedDrives(), 2);
+  const YPlatformMemoryMapEntry* entry = YPlatformGetMemoryMapEntryByType(
+      &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM);
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->start, (uint32_t)Y_FDC_OPTION_ROM_START_ADDRESS);
+  const YPlatformMemoryMapEntry* config_entry =
+      YPlatformGetMemoryMapEntryByType(
+          &platform_, Y_PLATFORM_MEMORY_MAP_ENTRY_FDC_OPTION_ROM_CONFIG);
+  ASSERT_NE(config_entry, nullptr);
+  EXPECT_EQ(
+      config_entry->end,
+      (uint32_t)Y_FDC_OPTION_ROM_START_ADDRESS + YFDCGetOptionROMSize() - 1);
+
+  EXPECT_EQ(
+      YPlatformReadMemoryWord(&platform_, Y_FDC_OPTION_ROM_START_ADDRESS),
+      0xAA55);
+  // Drive 0 and 1 CMOS types in the configuration block at 0x1FC0 + 1 and + 5.
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(
+          &platform_,
+          Y_FDC_OPTION_ROM_START_ADDRESS + Y_FDC_OPTION_ROM_CONFIG_OFFSET + 1),
+      Y_FDC_DRIVE_TYPE_1440KB);
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(
+          &platform_,
+          Y_FDC_OPTION_ROM_START_ADDRESS + Y_FDC_OPTION_ROM_CONFIG_OFFSET + 5),
+      Y_FDC_DRIVE_TYPE_1200KB);
+  // config_on_boot (0x04) in config_flags (0x1FEB) must be cleared.
+  EXPECT_EQ(
+      YPlatformReadMemoryByte(
+          &platform_, Y_FDC_OPTION_ROM_START_ADDRESS + 0x1FEB) &
+          0x04,
+      0);
+
+  // Both the 64-byte config block and the whole 8KB option ROM must sum to 0.
+  uint8_t config_sum = 0;
+  for (uint32_t i = 0; i < Y_FDC_OPTION_ROM_CONFIG_SIZE; ++i) {
+    config_sum =
+        (uint8_t)(config_sum +
+                  YPlatformReadMemoryByte(
+                      &platform_, Y_FDC_OPTION_ROM_START_ADDRESS +
+                                      Y_FDC_OPTION_ROM_CONFIG_OFFSET + i));
+  }
+  EXPECT_EQ(config_sum, 0);
+
+  uint8_t rom_sum = 0;
+  for (uint32_t i = 0; i < YFDCGetOptionROMSize(); ++i) {
+    rom_sum = (uint8_t)(rom_sum +
+                        YPlatformReadMemoryByte(
+                            &platform_, Y_FDC_OPTION_ROM_START_ADDRESS + i));
+  }
+  EXPECT_EQ(rom_sum, 0);
+}
+
 }  // namespace

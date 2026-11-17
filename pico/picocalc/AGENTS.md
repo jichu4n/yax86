@@ -94,13 +94,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 - **With no VMs on the card, the machine is the bench's with a second
   floppy drive**: the built-in floppy in drive A, B empty and no hard disk.
-  It reaches `A>` in 2,328,997 instructions, the bench's 2,328,491 and 506
-  for the BIOS and DOS looking at drive B, which is what says the two run
-  the same machine. A VM's count depends on its images: DOS330, the two
-  MS-DOS 3.30 floppies and a hard disk, takes 2,416,289. On a Pico at 250MHz,
-  off the floppy in flash, it takes 4.72 seconds of processor time without
-  drawing and 4.82 with it - 123% and 121% of a real PC/XT - and 4.89 off the
-  card; at 125MHz, 9.44 with drawing, 61.5%.
+  It reaches `A>` in 2,682,182 instructions (and 28,670,442 cycles), the
+  bench's 2,659,300 and 22,882 for the BIOS and DOS looking at drive B, which
+  is what says the two run the same machine. A VM's count depends on its
+  images: DOS330, the two MS-DOS 3.30 floppies and a hard disk, takes 2,768,473
+  (and 29,874,747 cycles). On a Pico at 250MHz, off the floppy in flash, it
+  takes 4.72 seconds of processor time without drawing and 4.82 with it - 123%
+  and 121% of a real PC/XT - and 4.89 off the card; at 125MHz, 9.44 with
+  drawing, 61.5% (processor-time figures from before the floppy option ROM was
+  mapped).
 - If the count moves and the bench's does not, the runtime has stopped
   running the measured machine. A key pressed during the boot moves it, which
   is why keys queued before the firmware started are dropped. So does a
@@ -109,28 +111,35 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   none.
 - **These counts are the 128KB machine's**, which a VM with `memory_kb=128`
   runs held directly in SRAM, as a Pico also does without the PSRAM or after a
-  crash (on a Pico 2 that fallback is 384KB: 2,352,177 instructions and
-  27,921,416 cycles with no VMs). With the PSRAM, a VM asking for more than
+  crash (on a Pico 2 that fallback is 384KB: 2,682,066 instructions and
+  28,669,969 cycles with no VMs; before the floppy option ROM was mapped,
+  2,352,177 and 27,921,416). With the PSRAM, a VM asking for more than
   `kPicoGuestSRAMSize` pages all of its memory (see "Paging guest RAM"), the
   BIOS testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
-  2,353,188 and 27,922,137, and the runtime with no VMs has not been counted at
-  640KB. On a Pico 2 at 250MHz, DOS330 boots as follows:
+  2,682,650 and 28,671,005, and the runtime with no VMs at 640KB takes
+  2,683,379 and 28,672,033. On a Pico at 250MHz, DOS330 boots as follows:
 
   | memory | layout | instructions | cycles | processor time | vs a real PC/XT |
   | --- | --- | --- | --- | --- | --- |
-  | 128KB | direct | 2,416,289 | 28,884,456 | 3.11s | 195% |
-  | 256KB | direct | 2,440,603 | 29,150,673 | 3.32s | 184% |
-  | 384KB | direct | 2,441,987 | 29,158,902 | 3.32s | 184% |
-  | 512KB | paged (384KB frames) | 2,442,676 | 29,158,902 | 3.94s | 155% |
-  | 640KB | paged (384KB frames) | 2,439,664 | 29,116,649 | 3.82s (3.81s no-draw) | 160% |
-  | 640KB (`video_adapter=mda`) | paged (384KB frames) | 2,412,600 | 29,114,560 | 3.74s | 163% |
+  | 128KB | direct | 2,768,473 | 29,874,747 | 5.43s | 115.1% |
+  | 256KB | paged (128KB frames) | 2,766,464 | 29,849,070 | 6.37s | 98.1% |
+  | 384KB | paged (128KB frames) | 2,768,351 | 29,874,935 | 6.50s | 96.2% |
+  | 512KB | paged (128KB frames) | 2,771,811 | 29,874,906 | 6.63s | 94.4% |
+  | 640KB | paged (128KB frames) | 2,772,520 | 29,876,525 | 6.71s | 93.2% |
+  | 640KB (`video_adapter=mda`) | paged (128KB frames) | 2,746,234 | 29,875,360 | 6.56s | 95.3% |
 
-  384KB direct and 512KB paged end on the same `29,158,902` cycle boundary
-  because the boot watches the screen every `kBootPollCycles` (238,636 cycles,
-  at 48,000-cycle batch boundaries): the extra eight 16KB POST block probes fit
-  within the poll window before DOS reaches its `"Enter new date"` polling
-  loop, so both advance on the same poll ticks while retiring different
-  instruction counts before `date_prompt`.
+  On a Pico 2 at 250MHz (measured before the floppy option ROM was mapped, not
+  re-measured), DOS330 took 3.11s at 128KB direct (2,416,289 / 28,884,456),
+  3.32s at 256KB direct (2,440,603 / 29,150,673) and 384KB direct (2,441,987 /
+  29,158,902), 3.94s at 512KB paged with 384KB frames (2,442,676 / 29,158,902),
+  3.82s at 640KB paged (3.81s no-draw, 2,439,664 / 29,116,649), and 3.74s at
+  640KB with `video_adapter=mda` (2,412,600 / 29,114,560). 384KB direct and
+  512KB paged ended on the same `29,158,902` cycle boundary because the boot
+  watches the screen every `kBootPollCycles` (238,636 cycles, at 48,000-cycle
+  batch boundaries): the extra eight 16KB POST block probes fit within the poll
+  window before DOS reaches its `"Enter new date"` polling loop, so both
+  advance on the same poll ticks while retiring different instruction counts
+  before `date_prompt`.
 
 ## Running in real time
 
@@ -365,25 +374,30 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   ```
   # yax86/vm/dos330/vm.cfg
   fd1=../../images/msdos330/disk01.img
+  fd1_type=360k
   fd2=../../images/msdos330/disk02.img
+  fd2_type=360k
   hd1=hd1.img
   video_adapter=cga
   memory_kb=640
   ```
 
-  `fd1` and `fd2` are 360KB or 720KB floppies, their format taken from the
-  image's size, `hd1` and `hd2` the hard disk controller's master and slave,
-  each the core's 10MB drive, `video_adapter` is `cga` or `mda`, `cga` without
-  it, and `memory_kb` is a multiple of 16 from 64 to 640, 640 without it. 16KB
-  is the granularity GLaBIOS probes conventional memory at; MS-DOS 3.30 stops
-  with `Configuration too large for memory` at 64KB, so 128KB is the smallest
-  size it boots in. Without a VM, the built-in 360KB floppy runs with the CGA
-  and 640KB. A key `vm.cfg` has that this firmware does not know is logged as
-  `vm_config_key_ignored` on each read, with the file's path and the key, and
-  skipped, so a file written by a later firmware still reads and a Configure
-  save keeps the line; a bad value or path is logged as `vm_config_problem`.
-  Loading a VM logs `vm_loaded` with its `path`, `video_adapter` and
-  `memory_kb`.
+  `fd1` and `fd2` are 360KB, 720KB, 1.2MB or 1.44MB floppies, their format
+  taken from the image's size and checked against `fd1_type` and `fd2_type`
+  (`360k`, `720k`, `1.2m` or `1.44m`, `360k` without it, so an existing VM with
+  a 720KB image and no `fdN_type` fails to open with `"wrong disk type for
+  drive"` until `Drive type` is set to `720KB`), `hd1` and `hd2` the hard disk
+  controller's master and slave, each the core's 10MB drive, `video_adapter` is
+  `cga` or `mda`, `cga` without it, and `memory_kb` is a multiple of 16 from 64
+  to 640, 640 without it. 16KB is the granularity GLaBIOS probes conventional
+  memory at; MS-DOS 3.30 stops with `Configuration too large for memory` at
+  64KB, so 128KB is the smallest size it boots in. Without a VM, the built-in
+  360KB floppy runs with the CGA and 640KB. A key `vm.cfg` has that this
+  firmware does not know is logged as `vm_config_key_ignored` on each read,
+  with the file's path and the key, and skipped, so a file written by a later
+  firmware still reads and a Configure save keeps the line; a bad value or path
+  is logged as `vm_config_problem`. Loading a VM logs `vm_loaded` with its
+  `path`, `video_adapter` and `memory_kb`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -593,42 +607,51 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
+- **New VM is a form**: the name, typed in place while its row is chosen,
   Memory - `128K`, `256K`, `384K`, `512K` or `640K`, with `(paged)` on sizes
   above `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter -
   `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
-  hard disks 1 and 2, and Create. Floppy disk 1 is Empty, New floppy image
-  (360KB), New floppy image (720KB), or Existing floppy image, a 360KB or 720KB
-  image from the browser; floppy disk 2 is Disabled or any of those; and a hard
-  disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB one.
-  A new VM starts with `640K`, `CGA`, floppy disk 1 empty, floppy disk 2 and
-  hard disk 2 disabled, and a new disk image as hard disk 1. An existing image
-  is shared, like any image outside the VM's folder. A floppy drive with no
-  disk is "empty" wherever the menu says what a drive holds, as the status rows
-  have it. Backspace on the form only ever erases the name - Esc leaves it - so
-  that a press meant for the name does not throw the form away. One image in
-  two drives is refused before anything is written. Create writes `vm.cfg` with
-  the drives there, as paths relative to it, and `video_adapter` and
-  `memory_kb` from a `VMMachine` in one `ConfigFileUpdate()` through
-  `VMConfigSave()`, which removes the line of a drive left out and a line left
-  with nothing else on it.
+  hard disks 1 and 2, and Create. Each floppy drive's page
+  (`src/vm_drive_config_screen.c`) has Drive type (`360KB`, `720KB`, `1.2MB` or
+  `1.44MB`, on `src/vm_floppy_type_screen.c`), then the disk in the drive:
+  Empty, the blank-image sizes that drive type accepts (`New floppy image
+  (360KB)`, `(720KB)`, `(1.2MB)` or `(1.44MB)`), and Existing floppy image, an
+  image from the browser that fits the drive type. Floppy disk 2 is left out
+  with the drive type Disabled, first on its list, which goes straight back to
+  the form, and its page then has only Drive type: being there is the drive's
+  setting, not a disk to put in it, so it is not among the disks. A hard
+  disk is Disabled,
+  New disk image (10MB), or Existing disk image, a 10MB one. A new VM starts
+  with `640K`, `CGA`, floppy disk 1 empty (`360KB`), floppy disk 2 and hard
+  disk 2 disabled, and a new disk image as hard disk 1. An existing image is
+  shared, like any image outside the VM's folder. A floppy drive with no disk
+  is "empty" wherever the menu says what a drive holds, as the status rows have
+  it. Backspace on the form only ever erases the name - Esc leaves it - so that
+  a press meant for the name does not throw the form away. One image in two
+  drives is refused before anything is written. Create writes `vm.cfg` with the
+  drives there, as paths relative to it, `fd1_type` and `fd2_type` for each
+  present floppy drive, and `video_adapter` and `memory_kb` from a `VMMachine`
+  in one `ConfigFileUpdate()` through `VMConfigSave()`, which removes the line
+  of a drive left out and a line left with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
   for both, starting from its memory size, video adapter and drives as its
   `vm.cfg` has them, with no name and Save for Create; a hand-edited valid
   `memory_kb` shows on the form (with `(paged)` when above
   `kPicoGuestSRAMSize`) and is kept unless another is chosen. Save writes the
-  four drives, `video_adapter` and `memory_kb` the same way, which keeps the
-  file's comments and other lines. An image of the VM's own a drive stops
-  holding stays in its folder - nothing is deleted behind the user's back - and
-  goes with the VM.
+  four drives, the floppy drive types, `video_adapter` and `memory_kb` the same
+  way, which keeps the file's comments and other lines. An image of the VM's
+  own a drive stops holding stays in its folder - nothing is deleted behind the
+  user's back - and goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
-  was**: `fd1.img` or `fd2.img`, 360KB or 720KB, for DOS's `FORMAT` - which
-  the floppy controller's Format Track makes possible (see `core/AGENTS.md`
-  for formatting 720KB under MS-DOS 3.30) - and `hd1.img` or `hd2.img`, the
-  core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name already in the
-  folder - an edit's new disk beside the old - gives `hd1_2.img` to `hd1_9.img`
-  and the like instead, so nothing is written over. The hard disk takes 5.1
-  seconds to write, a 360KB floppy a fifth of a second, and a 720KB floppy half
-  a second. Zeros rather than space merely allocated, which would hold whatever
+  was**: `fd1.img` or `fd2.img`, 360KB, 720KB, 1.2MB or 1.44MB, for DOS's
+  `FORMAT` - which the floppy controller's Format Track and the Multi-Floppy
+  BIOS option ROM make possible (see `core/AGENTS.md`) - and `hd1.img` or
+  `hd2.img`, the core's 10MB drive, for FDISK and then `FORMAT C:/S`. A name
+  already in the folder - an edit's new disk beside the old - gives `hd1_2.img`
+  to `hd1_9.img` and the like instead, so nothing is written over. The hard
+  disk takes 5.1 seconds to write, a 360KB floppy a fifth of a second, a 720KB
+  floppy half a second, a 1.2MB floppy 0.7 seconds, and a 1.44MB floppy 0.8
+  seconds. Zeros rather than space merely allocated, which would hold whatever
   the card held there - an old file's sectors, which FDISK could take for a
   partition table.
 - **A clone copies through 32KB of the guest's RAM**, which is not the
@@ -648,11 +671,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   prompting for a disk swap; DOS330 names `fd2=""` for that, and its boot
   is measured with two. `YPlatformConfig.num_floppy_drives` sets what the
   BIOS's DIP switches report.
-- **The menu changes the disk in either drive** for any 360KB or 720KB image on
-  the card, or ejects it. `DiskImageClose()` writes back the sector held and
-  closes the file; the FDC then reports the drive not ready, which DOS
-  shows as "General Failure ... Abort, Retry, Fail?". The built-in floppy is
-  not offered again once ejected - a reset brings it back.
+- **The menu changes the disk in either drive** for any floppy image on the
+  card that fits the drive's type, or ejects it. `DiskImageClose()` writes back
+  the sector held and closes the file; the FDC then reports the drive not
+  ready, which DOS shows as "General Failure ... Abort, Retry, Fail?". The
+  built-in floppy is not offered again once ejected - a reset brings it back.
 - **An image goes in one drive at a time.** Each drive keeps its own copy of
   a sector, so two drives writing one file would each overwrite the other's
   changes; inserting an image the other drive holds is refused with a
@@ -664,16 +687,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   and a delete, walking down to four folders deep with one pair of paths
   added to and put back, so a level costs the stack only its lengths.
 - `src/file_list.c` lists a folder for the menu's browser: `..`, folders,
-  then files exactly the image size, each by name, with hidden and system
-  entries left out. It holds 64, and says when a folder had more. Names are
-  8.3, as FatFs is built without long names.
-- **A floppy image is 360KB (368,640 bytes) or 720KB (737,280 bytes)**, chosen
-  from the file's size by `YFDCFindFormat()`. On a computer, a blank 360KB
-  image is `dd if=/dev/zero of=fd1.img bs=512 count=720` (formatted with
-  `mformat -i fd1.img -f 360 ::`) and a blank 720KB image is
-  `dd if=/dev/zero of=fd1.img bs=512 count=1440` (formatted with
-  `mformat -i fd1.img -f 720 ::`). See `core/AGENTS.md` for how MS-DOS 3.30
-  reads, boots and formats 720KB images.
+  then files matching the accepted image sizes, each by name, with hidden and
+  system entries left out. It holds 64, and says when a folder had more. Names
+  are 8.3, as FatFs is built without long names.
+- **A floppy image is 360KB (368,640 bytes), 720KB (737,280 bytes), 1.2MB
+  (1,228,800 bytes) or 1.44MB (1,474,560 bytes)**, chosen from the file's size
+  by `YFDCFindFormat()` and checked against the drive's type with
+  `YFDCDoesDriveTypeSupportFormat()`. On a computer, a blank image is
+  `dd if=/dev/zero of=fd1.img bs=512 count=<sectors>` (`720` for 360KB, `1440`
+  for 720KB, `2400` for 1.2MB, `2880` for 1.44MB), formatted with
+  `mformat -i fd1.img -f <size> ::` (`360`, `720`, `1200` or `1440`). See
+  `core/AGENTS.md` for how MS-DOS 3.30 reads, boots and formats each.
 - **A hard disk image is the core's 10MB drive**, 306 cylinders, 4 heads, 17 sectors, exactly
   10,653,696 bytes. A blank one is `dd if=/dev/zero of=hd1.img bs=512
   count=20808`, partitioned with FDISK and formatted with `FORMAT C: /S` from
@@ -914,8 +938,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   its drive is in use, and composing is skipped while nothing they show has
   changed. Composing every time cost the boot 0.74% against master; skipping
   it, 0.42%, within 0.06% of composing once a second.
-- The status page in the menu has the six lines of figures the panel used
-  to show at all times.
+- The status page in the menu has the lines of figures the panel used to
+  show at all times, with the drives split over two of them.
 
 ## The menu
 
@@ -938,8 +962,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   menu with an `EmulatorMenuExit`, and `src/emulator.c` carries it out.
 - **The status page's lines are the emulator's**: it fills them in on
   every pass while the menu shows, and the status screen draws them every
-  second. `Display` starts with the adapter, `CGA` or `MDA`. Filling them in
-  costs nothing that matters while the VM is paused.
+  second. `Display` starts with the adapter, `CGA` or `MDA`. `Floppy` has
+  each floppy drive with its type and the sectors it has read and written
+  (`FD1 360KB: 120r 0w  FD2 1.44MB: 5931r 3018w`), and `Hard disk` the hard
+  disks the same way, then the time all the drives have spent on the card
+  (`HD1: 812r 34w  card 0.412s`). Words in place of `r` and `w`, or the
+  drives on one line, run past the box's right edge with two drives busy.
+  Filling them in costs nothing that matters while the VM is paused.
 - **A list box is a box that lists items, one of them selected**: most
   screens, and the menu's pages. `src/list_box.c` has what they share:
   moving the selection, scrolling a long list, and drawing the items. A

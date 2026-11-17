@@ -12,9 +12,12 @@ T YDMAReadPort
 T YDMATransferByte
 T YDMAWritePort
 T YFDCEjectDisk
+T YFDCGetOptionROMData
+T YFDCGetOptionROMSize
 T YFDCHandleTC
 T YFDCInit
 T YFDCInsertDisk
+T YFDCReadOptionROMByte
 T YFDCReadPort
 T YFDCTick
 T YFDCWritePort

@@ -20,6 +20,7 @@ static const char* const kStatusDescriptions[] = {
     [kDiskImageNoFilesystem] = "no FAT volume",
     [kDiskImageNotFound] = "no image",
     [kDiskImageWrongSize] = "image is the wrong size",
+    [kDiskImageIncompatibleDrive] = "wrong disk type for drive",
     [kDiskImageEjected] = "ejected",
 };
 

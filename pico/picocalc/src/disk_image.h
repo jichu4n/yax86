@@ -22,6 +22,7 @@ typedef enum DiskImageStatus {
   kDiskImageNoFilesystem,
   kDiskImageNotFound,
   kDiskImageWrongSize,
+  kDiskImageIncompatibleDrive,
   // Closed with DiskImageClose(): a drive with no disk in it.
   kDiskImageEjected,
 } DiskImageStatus;
