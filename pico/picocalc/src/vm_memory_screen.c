@@ -10,10 +10,7 @@
 #include "yax86_pico.h"
 
 static const uint16_t kPresets[] = {
-    128,
-    256,
-    512,
-    640,
+    128, 256, 384, 512, 640,
 };
 
 enum {

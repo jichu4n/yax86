@@ -1,5 +1,5 @@
-// Memory, from a VM's configuration: 128K, 256K, 512K or 640K, with "(paged)"
-// on sizes above kPicoGuestSRAMSize.
+// Memory, from a VM's configuration: 128K, 256K, 384K, 512K or 640K, with
+// "(paged)" on sizes above kPicoGuestSRAMSize.
 #ifndef YAX86_PICOCALC_VM_MEMORY_SCREEN_H
 #define YAX86_PICOCALC_VM_MEMORY_SCREEN_H
 

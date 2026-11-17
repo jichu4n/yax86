@@ -549,7 +549,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
   (after a separator line if there are any VMs), a page for each VM with its
-  memory size and video adapter on one line (`Memory: 640K (paged)   Video:
+  memory size and video adapter on one line (`Memory: 640K (paged)  Video:
   CGA`) and then the images in its drives - two drives a line, A and B then
   HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed for
   Rename and Clone, and a question before Delete. Afterwards it shows the list
@@ -593,10 +593,10 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  Memory - `128K`, `256K`, `512K` or `640K`, with `(paged)` on sizes above
-  `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter - `CGA` or
-  `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2, hard disks
-  1 and 2, and Create. Floppy disk 1 is Empty, New floppy image (360KB), New
+  Memory - `128K`, `256K`, `384K`, `512K` or `640K`, with `(paged)` on sizes
+  above `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter -
+  `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
+  hard disks 1 and 2, and Create. Floppy disk 1 is Empty, New floppy image (360KB), New
   floppy image (720KB), or Existing floppy image, a 360KB or 720KB image from
   the browser; floppy disk 2 is Disabled or any of those; and a hard disk is
   Disabled, New disk image (10MB), or Existing disk image, a 10MB one. A new VM

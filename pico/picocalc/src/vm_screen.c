@@ -131,7 +131,7 @@ static void OnDraw(DisplayBox* box) {
     char memory[24];
     VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
     snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "Memory: %s   Video: %s",
+        lines[num_lines], sizeof(lines[num_lines]), "Memory: %-8s  Video: %s",
         memory, VMConfigVideoAdapterLabel(g_machine.video_adapter));
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
