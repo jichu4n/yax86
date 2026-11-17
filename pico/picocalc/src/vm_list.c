@@ -309,9 +309,9 @@ static bool PlanDrives(
 }
 
 // Write the blank disks planned, then vm's file naming every drive and its
-// video adapter. Deletes the blank disks written if it fails.
+// machine settings. Deletes the blank disks written if it fails.
 static bool WriteConfig(
-    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    const VMEntry* vm, const VMListDrives* drives, const VMMachine* machine,
     FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   if (transfer->total > 0) {
     transfer->progress(0, transfer->total);
@@ -326,7 +326,7 @@ static bool WriteConfig(
   }
   if (result != FR_OK) {
     Describe("make the disks of", vm, result, problem);
-  } else if (VMConfigSave(vm, g_paths, video_adapter, problem)) {
+  } else if (VMConfigSave(vm, g_paths, machine, problem)) {
     return true;
   }
   for (uint8_t drive = 0; drive < written; ++drive) {
@@ -338,7 +338,7 @@ static bool WriteConfig(
 }
 
 VMListResult VMListCreate(
-    const char* name, const VMListDrives* drives, YVideoAdapter video_adapter,
+    const char* name, const VMListDrives* drives, const VMMachine* machine,
     FSTransfer* transfer, VMEntry* created,
     char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
@@ -354,7 +354,7 @@ VMListResult VMListCreate(
     Describe("make", created, result, problem);
     return kVMListFailed;
   }
-  if (WriteConfig(created, drives, video_adapter, transfer, problem)) {
+  if (WriteConfig(created, drives, machine, transfer, problem)) {
     return kVMListDone;
   }
   FSDeleteFolder(folder, NULL);
@@ -362,16 +362,15 @@ VMListResult VMListCreate(
 }
 
 VMListResult VMListEdit(
-    const VMEntry* vm, const VMListDrives* drives, YVideoAdapter video_adapter,
+    const VMEntry* vm, const VMListDrives* drives, const VMMachine* machine,
     FSTransfer* transfer, char problem[kVMProblemLength + 1]) {
   static char folder[kFSMaxPath + 1];
   FolderOf(vm, folder);
   if (!PlanDrives(vm, folder, drives, transfer, problem)) {
     return kVMListRefused;
   }
-  return WriteConfig(vm, drives, video_adapter, transfer, problem)
-             ? kVMListDone
-             : kVMListFailed;
+  return WriteConfig(vm, drives, machine, transfer, problem) ? kVMListDone
+                                                             : kVMListFailed;
 }
 
 VMListResult VMListClone(

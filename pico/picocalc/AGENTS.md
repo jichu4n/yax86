@@ -107,17 +107,30 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   floppy that is not `resources`' byte for byte, or a hard disk image - see
   the SD card section. Compare against a baseline with the same VM, or
   none.
-- **These counts are the 128KB machine's**, which a Pico runs without the
-  PSRAM or after a crash (on a Pico 2 that fallback is 384KB: 2,352,177
-  instructions and 27,921,416 cycles with no VMs, 2,441,987 and 29,158,902 on
-  DOS330). With the PSRAM both boards page 640KB (see "Paging guest RAM"), and
-  DOS330 boots in 2,439,664 instructions and 29,116,649 cycles, or 2,412,600
-  and 29,114,560 with `video_adapter=mda`, the BIOS testing and DOS sizing
-  more memory; the bench's 640KB `dos-boot` takes 2,353,188 and 27,922,137. On
-  a Pico 2 at 250MHz with 384KB of SRAM frames, DOS330 at 640KB takes 3.83
-  seconds of processor time with drawing and 3.81 without - 159% and 160% of a
-  real PC/XT - and 3.74 with `video_adapter=mda`. The runtime with no VMs has
-  not been counted at 640KB.
+- **These counts are the 128KB machine's**, which a VM with `memory_kb=128`
+  runs held directly in SRAM, as a Pico also does without the PSRAM or after a
+  crash (on a Pico 2 that fallback is 384KB: 2,352,177 instructions and
+  27,921,416 cycles with no VMs). With the PSRAM, a VM asking for more than
+  `kPicoGuestSRAMSize` pages all of its memory (see "Paging guest RAM"), the
+  BIOS testing and DOS sizing more memory; the bench's 640KB `dos-boot` takes
+  2,353,188 and 27,922,137, and the runtime with no VMs has not been counted at
+  640KB. On a Pico 2 at 250MHz, DOS330 boots as follows:
+
+  | memory | layout | instructions | cycles | processor time | vs a real PC/XT |
+  | --- | --- | --- | --- | --- | --- |
+  | 128KB | direct | 2,416,289 | 28,884,456 | 3.11s | 195% |
+  | 256KB | direct | 2,440,603 | 29,150,673 | 3.32s | 184% |
+  | 384KB | direct | 2,441,987 | 29,158,902 | 3.32s | 184% |
+  | 512KB | paged (384KB frames) | 2,442,676 | 29,158,902 | 3.94s | 155% |
+  | 640KB | paged (384KB frames) | 2,439,664 | 29,116,649 | 3.82s (3.81s no-draw) | 160% |
+  | 640KB (`video_adapter=mda`) | paged (384KB frames) | 2,412,600 | 29,114,560 | 3.74s | 163% |
+
+  384KB direct and 512KB paged end on the same `29,158,902` cycle boundary
+  because the boot watches the screen every `kBootPollCycles` (238,636 cycles,
+  at 48,000-cycle batch boundaries): the extra eight 16KB POST block probes fit
+  within the poll window before DOS reaches its `"Enter new date"` polling
+  loop, so both advance on the same poll ticks while retiring different
+  instruction counts before `date_prompt`.
 
 ## Running in real time
 
@@ -342,12 +355,12 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   folders, which are create, edit configuration, rename, clone and delete.
   Rename and delete keep `boot_default` naming a VM that is there.
 - **A VM is a folder in `yax86/vm`**, `src/vm_config.c`, holding `vm.cfg`,
-  which names its drives' images and its video adapter, and the images that
-  are its own. Every folder there with a `vm.cfg` is one, named for the
-  folder, and there are no VMs anywhere else. Each line is logfmt, `#` starts
-  a comment, and a path is relative to the file's folder - `..` followed - or
-  to the card's root with a leading `/`, so VMs can share images and keep
-  their own:
+  which names its drives' images, its video adapter and its memory size, and
+  the images that are its own. Every folder there with a `vm.cfg` is one, named
+  for the folder, and there are no VMs anywhere else. Each line is logfmt, `#`
+  starts a comment, and a path is relative to the file's folder - `..`
+  followed - or to the card's root with a leading `/`, so VMs can share images
+  and keep their own:
 
   ```
   # yax86/vm/dos330/vm.cfg
@@ -355,17 +368,22 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   fd2=../../images/msdos330/disk02.img
   hd1=hd1.img
   video_adapter=cga
+  memory_kb=640
   ```
 
   `fd1` and `fd2` are 360KB or 720KB floppies, their format taken from the
   image's size, `hd1` and `hd2` the hard disk controller's master and slave,
-  each the core's 10MB drive, and `video_adapter` is `cga` or `mda`, `cga`
-  without it. Without a VM, the built-in 360KB floppy runs with the CGA. A key
-  `vm.cfg` has that this firmware does not know is logged as
+  each the core's 10MB drive, `video_adapter` is `cga` or `mda`, `cga` without
+  it, and `memory_kb` is a multiple of 16 from 64 to 640, 640 without it. 16KB
+  is the granularity GLaBIOS probes conventional memory at; MS-DOS 3.30 stops
+  with `Configuration too large for memory` at 64KB, so 128KB is the smallest
+  size it boots in. Without a VM, the built-in 360KB floppy runs with the CGA
+  and 640KB. A key `vm.cfg` has that this firmware does not know is logged as
   `vm_config_key_ignored` on each read, with the file's path and the key, and
   skipped, so a file written by a later firmware still reads and a Configure
   save keeps the line; a bad value or path is logged as `vm_config_problem`.
-  Loading a VM logs `vm_loaded` with its `path` and `video_adapter`.
+  Loading a VM logs `vm_loaded` with its `path`, `video_adapter` and
+  `memory_kb`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -530,13 +548,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
-  (after a separator line if there are any VMs), a page for each VM with the
-  images in its drives - two drives a line, A and B then HD1 and HD2 - then
-  its video adapter, over Configure, Rename, Clone and Delete, a name typed
-  for Rename and Clone, and a question before Delete. Afterwards it shows
-  the list of VMs to manage again with the VM renamed or made chosen - after
-  Configure, the VM's page - and the list at power on waits for a key, as
-  after USB mass storage.
+  (after a separator line if there are any VMs), a page for each VM with its
+  memory size and video adapter on one line (`Memory: 640K (paged)  Video:
+  CGA`) and then the images in its drives - two drives a line, A and B then
+  HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed for
+  Rename and Clone, and a question before Delete. Afterwards it shows the list
+  of VMs to manage again with the VM renamed or made chosen - after Configure,
+  the VM's page - and the list at power on waits for a key, as after USB mass
+  storage.
 - **The VM manager's screen holds a `VMManager`, in `src/vm_manager.c`, and
   passes it down**: the launcher's VM list and settings, the copy buffer, and what a
   screen changed. Each change is carried out by the screen that confirms
@@ -574,28 +593,33 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   will not do says why on the keys row and leaves it to be typed again; a
   rename to the same name, in any capitals, does nothing.
 - **New VM is a form**: the name, typed in place while its row is chosen,
-  floppy disks 1 and 2, hard disks 1 and 2, Video adapter - `CGA` or `MDA`,
-  on a page of its own, `src/vm_video_adapter_screen.c` - and Create. Floppy
-  disk 1 is Empty, New floppy image (360KB), New floppy image (720KB), or
-  Existing floppy image, a 360KB or 720KB image from the browser; floppy disk
-  2 is Disabled or any of those; and a hard disk is Disabled, New disk image
-  (10MB), or Existing disk image, a 10MB one. A new VM starts with floppy disk
-  1 empty, floppy disk 2 and hard disk 2 disabled, a new disk image as hard
-  disk 1, and `CGA`. An existing image is shared, like any image outside the
-  VM's folder. A floppy drive with no disk is "empty" wherever the menu says
-  what a drive holds, as the status rows have it. Backspace on the form only
-  ever erases the name - Esc leaves it - so that a press meant for the name
-  does not throw the form away. One image in two drives is refused before
-  anything is written. Create writes `vm.cfg` with the drives there, as paths
-  relative to it, and `video_adapter`, always written as `cga` or `mda`, in one
-  `ConfigFileUpdate()` through `VMConfigSave()`, which removes the line of a
-  drive left out and a line left with nothing else on it.
+  Memory - `128K`, `256K`, `384K`, `512K` or `640K`, with `(paged)` on sizes
+  above `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter -
+  `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
+  hard disks 1 and 2, and Create. Floppy disk 1 is Empty, New floppy image
+  (360KB), New floppy image (720KB), or Existing floppy image, a 360KB or 720KB
+  image from the browser; floppy disk 2 is Disabled or any of those; and a hard
+  disk is Disabled, New disk image (10MB), or Existing disk image, a 10MB one.
+  A new VM starts with `640K`, `CGA`, floppy disk 1 empty, floppy disk 2 and
+  hard disk 2 disabled, and a new disk image as hard disk 1. An existing image
+  is shared, like any image outside the VM's folder. A floppy drive with no
+  disk is "empty" wherever the menu says what a drive holds, as the status rows
+  have it. Backspace on the form only ever erases the name - Esc leaves it - so
+  that a press meant for the name does not throw the form away. One image in
+  two drives is refused before anything is written. Create writes `vm.cfg` with
+  the drives there, as paths relative to it, and `video_adapter` and
+  `memory_kb` from a `VMMachine` in one `ConfigFileUpdate()` through
+  `VMConfigSave()`, which removes the line of a drive left out and a line left
+  with nothing else on it.
 - **Configure is the same form on an existing VM**, `src/vm_config_screen.c`
-  for both, starting from its drives and video adapter as its `vm.cfg` has
-  them, with no name and Save for Create. Save writes the four drives and
-  `video_adapter` the same way, which keeps the file's comments and other
-  lines. An image of the VM's own a drive stops holding stays in its folder -
-  nothing is deleted behind the user's back - and goes with the VM.
+  for both, starting from its memory size, video adapter and drives as its
+  `vm.cfg` has them, with no name and Save for Create; a hand-edited valid
+  `memory_kb` shows on the form (with `(paged)` when above
+  `kPicoGuestSRAMSize`) and is kept unless another is chosen. Save writes the
+  four drives, `video_adapter` and `memory_kb` the same way, which keeps the
+  file's comments and other lines. An image of the VM's own a drive stops
+  holding stays in its folder - nothing is deleted behind the user's back - and
+  goes with the VM.
 - **A blank disk is zeros, in the VM's folder, unformatted as a new disk
   was**: `fd1.img` or `fd2.img`, 360KB or 720KB, for DOS's `FORMAT` - which
   the floppy controller's Format Track makes possible (see `core/AGENTS.md`
@@ -740,8 +764,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 ## Paging guest RAM
 
-- **With the PSRAM, all 640KB of guest RAM is paged: 128KB of SRAM frames on a
-  Pico and 384KB on a Pico 2, with PSRAM behind them**, through the core's
+- **A VM that fits in `kPicoGuestSRAMSize` holds its RAM directly in SRAM** -
+  up to 128KB on a Pico and 384KB on a Pico 2 - with no paging, whether or not
+  the PSRAM is up. Above `kPicoGuestSRAMSize`, such as the default 640KB, all
+  of the VM's guest RAM is paged when the PSRAM is up: 128KB of SRAM frames on
+  a Pico and 384KB on a Pico 2, with PSRAM behind them, through the core's
   `YPlatformConfig.paged_memory` (`core/AGENTS.md`). `pico/common/pager.c`
   does the paging, and the SRAM given to the guest is in
   `pico/common/boards/<board>/yax86_pico.h`, a header per board so each board
@@ -749,8 +776,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   here. The pager brings a page into a frame when the guest first touches it,
   from PSRAM, or as zeros if it has never been written back, and takes frames
   back by the clock algorithm, writing a page back only if it was written. The
-  report's `paging` group has the counts and `fault_us`, the time in the fault
-  handler.
+  report's `paging` group has `guest_ram_kb`, the counts and `fault_us`, the
+  time in the fault handler.
 - **384KB on a Pico 2 is chosen by the PicoCalc workloads** at 250MHz, and is
   also the largest 16KB BIOS memory block that fits in the 512KB main SRAM bank
   alongside video memory, the SDK, USB and the runtime (513,748 of 524,288
@@ -792,13 +819,15 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   processor time against 179.7, and more than doubled the Word session's
   share in faults, 2.8% to 6.0%. The programs' code and data are above
   64KB, so it sped up little of what they do, and it left half the frames.
-- **Without the PSRAM, or after a crash, the guest has 128KB of SRAM on a Pico
-  and 384KB on a Pico 2**, held directly. A hard fault on either core reboots
-  the board through `isr_hardfault()`, which replaces the SDK's breakpoint, and
-  leaves a marker in RAM startup does not clear; the start after it pages
-  nothing, says so on the message row, and reports `off_after_fault`. Paging is
-  the newest code a fault could come from, and a board that halts on one needs
-  its cable replugged.
+- **Without the PSRAM, or after a crash, a VM asking for more than
+  `kPicoGuestSRAMSize` is capped to 128KB of SRAM on a Pico and 384KB on a
+  Pico 2**, held directly, and the message row says `Using <got>K of <asked>K:
+  PSRAM is not available` or `the last start crashed`. A hard fault on either
+  core reboots the board through `isr_hardfault()`, which replaces the SDK's
+  breakpoint, and leaves a marker in RAM startup does not clear; the start
+  after it pages nothing and reports `off_after_fault`. Paging is the newest
+  code a fault could come from, and a board that halts on one needs its cable
+  replugged.
 - **The runtime reads the BIOS data area through the memory map**,
   `GuestRAMByte()`, since with the PSRAM it is paged.
 
@@ -986,8 +1015,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   - The walk covers the menu and each of its pages: a drive's page, the
     browser, Status, and the questions before Reset and Power off. Then,
     powered off to the list: the list itself, Manage VMs, a VM's page, the
-    New VM form and a drive's choices on it, USB mass storage, Settings, Font,
-    Display timeout and Boot delay.
+    New VM form and a drive's, the video adapter's and the memory's choices on
+    it, USB mass storage, Settings, Font, Display timeout and Boot delay.
   - It only looks and backs out, with Esc or Cancel, so the card is as it
     was. Pages reached only by acting, such as copying or exporting, need a
     VM or an image made for the test, and deleted after.

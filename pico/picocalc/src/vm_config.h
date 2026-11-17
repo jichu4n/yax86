@@ -1,13 +1,14 @@
 // A VM: a folder in `yax86/vm`, holding a configuration file, `vm.cfg`,
-// that names the images in the VM's drives and its video adapter, and
-// whichever of those images are its own. A VM is named for its folder -
-// `yax86/vm/DOS330` is the VM DOS330. The list of them is in vm_list.h, and
-// the card's own settings in settings.h.
+// that names the images in the VM's drives, its video adapter and its memory
+// size, and whichever of those images are its own. A VM is named for its
+// folder - `yax86/vm/DOS330` is the VM DOS330. The list of them is in
+// vm_list.h, and the card's own settings in settings.h.
 //
 //   fd1=../../images/msdos330/disk01.img
 //   hd1=hd1.img
 //   hd2=/shared/tools.img
 //   video_adapter=mda
+//   memory_kb=640
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
@@ -17,7 +18,8 @@
 // a drive with no disk. A hard disk not named, or named as "", is not there:
 // a hard disk with no image is no disk at all. Floppy images are 360KB or
 // 720KB and hard disk images the core's 10MB drive. video_adapter is cga or
-// mda, and cga when not named. Keys this firmware does not know are skipped.
+// mda, and cga when not named. memory_kb is a multiple of 16 from 64 to 640,
+// and 640 when not named. Keys this firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -25,6 +27,7 @@
 #include <stdint.h>
 
 #include "config_file.h"
+#include "core/platform.h"
 #include "core/video.h"
 #include "fs.h"
 
@@ -39,6 +42,13 @@ enum {
   kVMDriveHD1,
   kVMDriveHD2,
   kNumVMDrives,
+
+  // Conventional memory in KB: 64 to 640 in 16KB steps, the granularity
+  // GLaBIOS probes at, and 640 when not named.
+  kVMMinMemoryKB = Y_PLATFORM_MIN_CONVENTIONAL_MEMORY_SIZE / 1024,
+  kVMMaxMemoryKB = Y_PLATFORM_MAX_CONVENTIONAL_MEMORY_SIZE / 1024,
+  kVMMemoryStepKB = 16,
+  kVMDefaultMemoryKB = kVMMaxMemoryKB,
 
   // A VM's name: its folder's, an 8.3 name.
   kVMNameLength = 12,
@@ -62,6 +72,13 @@ typedef struct VMEntry {
   char path[kFSMaxPath + 1];
 } VMEntry;
 
+// A VM's machine settings, outside its drives: video adapter and conventional
+// memory in KB.
+typedef struct VMMachine {
+  YVideoAdapter video_adapter;
+  uint16_t memory_kb;
+} VMMachine;
+
 typedef struct VMConfig {
   VMEntry entry;
   // Each drive's image, as a path from the card's root, or empty.
@@ -71,6 +88,8 @@ typedef struct VMConfig {
   bool is_present[kNumVMDrives];
   // The VM's video adapter: Y_VIDEO_ADAPTER_CGA when not named.
   YVideoAdapter video_adapter;
+  // The VM's conventional memory in KB: kVMDefaultMemoryKB when not named.
+  uint16_t memory_kb;
 } VMConfig;
 
 // The video adapter's name in vm.cfg and the report (cga, mda), and its label
@@ -92,12 +111,12 @@ bool VMConfigRead(
 // Write a VM's configuration to its file, as VMConfigSaveDrive() writes one
 // drive, making the file if there is none. Each drive is a path from the
 // card's root, empty for none, or NULL for a drive not there, whose line is
-// removed; video_adapter is always written, as cga or mda. Returns false, with
-// the problem described, if a path would be too long or the file could not be
-// written.
+// removed; video_adapter, as cga or mda, and memory_kb are always written.
+// Returns false, with the problem described, if a path would be too long or
+// the file could not be written.
 bool VMConfigSave(
     const VMEntry* vm, const char* const drives[kNumVMDrives],
-    YVideoAdapter video_adapter, char problem[kVMProblemLength + 1]);
+    const VMMachine* machine, char problem[kVMProblemLength + 1]);
 
 // Save the image in a VM's drive, a path from the card's root or NULL or
 // empty for none, to its `vm.cfg`, through ConfigFileUpdate(), written as
