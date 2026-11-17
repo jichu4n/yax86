@@ -435,20 +435,25 @@ static void FormatDiskLines(char* floppy, char* hard_disk, size_t size) {
       [kVMDriveHD1] = HardDiskGetImage(kHardDisk1),
       [kVMDriveHD2] = HardDiskGetImage(kHardDisk2),
   };
-  FormatDrives(floppy, size, images, kVMDriveFD1, kVMDriveFD2);
+  // The lines are kept between refreshes, so each is written in full, with
+  // none for a line with no drive to show.
+  if (FormatDrives(floppy, size, images, kVMDriveFD1, kVMDriveFD2) == 0) {
+    snprintf(floppy, size, "none");
+  }
   size_t length =
       FormatDrives(hard_disk, size, images, kVMDriveHD1, kVMDriveHD2);
+  if (length == 0) {
+    length = Filled(snprintf(hard_disk, size, "none  "), size);
+  }
   uint64_t card_us = 0;
   bool is_any_open = false;
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     is_any_open = is_any_open || images[drive]->status == kDiskImageOpen;
     card_us += images[drive]->stats.read_us + images[drive]->stats.write_us;
   }
+  // With no drive open, nothing has used the card.
   if (!is_any_open) {
     return;
-  }
-  if (length == 0) {
-    length = Filled(snprintf(hard_disk, size, "none  "), size);
   }
   const uint64_t card_ms = card_us / kMicrosecondsPerMillisecond;
   snprintf(
