@@ -10,6 +10,7 @@
 #include "list_box.h"
 #include "vm_config_screen.h"
 #include "vm_delete_screen.h"
+#include "vm_memory_screen.h"
 #include "vm_name_screen.h"
 
 typedef enum VMItem {
@@ -28,8 +29,8 @@ static const BoxItem kVMItems[kNumVMItems] = {
 };
 
 enum {
-  // Up to two drive lines, or "No disks.", plus one line for the video
-  // adapter and memory size.
+  // One line for the memory size and video adapter, plus up to two drive
+  // lines, or "No disks.".
   kMaxVMLines = kNumVMDrives / 2 + 1,
 };
 
@@ -114,47 +115,47 @@ static const char* DriveShown(uint8_t drive, const char* name) {
   return g_is_present[drive] ? "empty" : "disabled";
 }
 
-// The images in the VM's drives, its video adapter and its memory size, over
+// The VM's memory size, its video adapter and the images in its drives, over
 // what can be done to it.
 static void OnDraw(DisplayBox* box) {
-  // A line for each pair of drives - FD1 and FD2, HD1 and HD2 - that holds
-  // anything, then the video adapter and memory size, with room for any name,
+  // The memory size and video adapter, then a line for each pair of drives -
+  // FD1 and FD2, HD1 and HD2 - that holds anything, with room for any name,
   // which the box cuts to its width.
   char lines[kMaxVMLines][64];
   const char* line_pointers[kMaxVMLines];
   uint8_t num_lines = 0;
-  for (uint8_t first = 0; first < kNumVMDrives; first += 2) {
-    char label_a[8];
-    char label_b[8];
-    snprintf(label_a, sizeof(label_a), "%s:", kVMDriveLabels[first]);
-    snprintf(label_b, sizeof(label_b), "%s:", kVMDriveLabels[first + 1]);
-    const char* a = g_drives[first];
-    const char* b = g_drives[first + 1];
-    if (a[0] == '\0' && b[0] == '\0') {
-      continue;
-    }
-    snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "%-4s %-12.12s %-4s %.12s",
-        label_a, DriveShown(first, a), label_b,
-        DriveShown((uint8_t)(first + 1), b));
-    line_pointers[num_lines] = lines[num_lines];
-    ++num_lines;
-  }
   if (!g_is_readable) {
     line_pointers[0] = "Its vm.cfg has a problem.";
     num_lines = 1;
   } else {
-    if (num_lines == 0) {
-      line_pointers[0] = "No disks.";
-      num_lines = 1;
-    }
+    char memory[24];
+    VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
     snprintf(
-        lines[num_lines], sizeof(lines[num_lines]),
-        "Video adapter: %s   Memory: %uK",
-        VMConfigVideoAdapterLabel(g_machine.video_adapter),
-        (unsigned)g_machine.memory_kb);
+        lines[num_lines], sizeof(lines[num_lines]), "Memory: %s   Video: %s",
+        memory, VMConfigVideoAdapterLabel(g_machine.video_adapter));
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
+    for (uint8_t first = 0; first < kNumVMDrives; first += 2) {
+      char label_a[8];
+      char label_b[8];
+      snprintf(label_a, sizeof(label_a), "%s:", kVMDriveLabels[first]);
+      snprintf(label_b, sizeof(label_b), "%s:", kVMDriveLabels[first + 1]);
+      const char* a = g_drives[first];
+      const char* b = g_drives[first + 1];
+      if (a[0] == '\0' && b[0] == '\0') {
+        continue;
+      }
+      snprintf(
+          lines[num_lines], sizeof(lines[num_lines]),
+          "%-4s %-12.12s %-4s %.12s", label_a, DriveShown(first, a), label_b,
+          DriveShown((uint8_t)(first + 1), b));
+      line_pointers[num_lines] = lines[num_lines];
+      ++num_lines;
+    }
+    if (num_lines == 1) {
+      line_pointers[num_lines] = "No disks.";
+      ++num_lines;
+    }
   }
   ListBoxDrawItems(
       box, g_vm_manager->vms->vms[g_vm].name, line_pointers, num_lines,

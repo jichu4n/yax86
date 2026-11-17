@@ -548,13 +548,14 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 
 - **Manage VMs, from the list, makes, edits, renames, clones and deletes
   VMs**, through `src/vm_list.c`: a page listing the VMs and then New VM
-  (after a separator line if there are any VMs), a page for each VM with the
-  images in its drives - two drives a line, A and B then HD1 and HD2 - then
-  its video adapter and memory size on one line (`Video adapter: CGA   Memory:
-  640K`), over Configure, Rename, Clone and Delete, a name typed for Rename and
-  Clone, and a question before Delete. Afterwards it shows the list of VMs to
-  manage again with the VM renamed or made chosen - after Configure, the VM's
-  page - and the list at power on waits for a key, as after USB mass storage.
+  (after a separator line if there are any VMs), a page for each VM with its
+  memory size and video adapter on one line (`Memory: 640K (paged)   Video:
+  CGA`) and then the images in its drives - two drives a line, A and B then
+  HD1 and HD2 - over Configure, Rename, Clone and Delete, a name typed for
+  Rename and Clone, and a question before Delete. Afterwards it shows the list
+  of VMs to manage again with the VM renamed or made chosen - after Configure,
+  the VM's page - and the list at power on waits for a key, as after USB mass
+  storage.
 - **The VM manager's screen holds a `VMManager`, in `src/vm_manager.c`, and
   passes it down**: the launcher's VM list and settings, the copy buffer, and what a
   screen changed. Each change is carried out by the screen that confirms
