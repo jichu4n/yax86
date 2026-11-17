@@ -8,15 +8,11 @@
 #include "list_box.h"
 #include "vm_config.h"
 
-enum {
-  kNumDriveTypes = 4,
-};
-
-static const YFDCDriveType kDriveTypes[kNumDriveTypes] = {
-    Y_FDC_DRIVE_TYPE_360KB,
-    Y_FDC_DRIVE_TYPE_720KB,
-    Y_FDC_DRIVE_TYPE_1200KB,
-    Y_FDC_DRIVE_TYPE_1440KB,
+// Listed in menu order: the standard drive (360KB and 720KB, no option ROM)
+// first, the default, then the four specific mechanisms in ascending capacity.
+static const YFDCDriveType kDriveTypes[Y_FDC_NUM_DRIVE_TYPES] = {
+    Y_FDC_DRIVE_TYPE_NONE,   Y_FDC_DRIVE_TYPE_360KB,  Y_FDC_DRIVE_TYPE_720KB,
+    Y_FDC_DRIVE_TYPE_1200KB, Y_FDC_DRIVE_TYPE_1440KB,
 };
 
 extern const Screen kVMFloppyTypeScreen;
@@ -29,7 +25,7 @@ static YFDCDriveType* g_chosen;
 ScreenResult VMFloppyTypeScreenOpen(YFDCDriveType* chosen) {
   g_chosen = chosen;
   g_list_box.selected = 0;
-  for (uint8_t i = 0; i < kNumDriveTypes; ++i) {
+  for (uint8_t i = 0; i < Y_FDC_NUM_DRIVE_TYPES; ++i) {
     if (kDriveTypes[i] == *chosen) {
       g_list_box.selected = i;
       break;
@@ -39,7 +35,7 @@ ScreenResult VMFloppyTypeScreenOpen(YFDCDriveType* chosen) {
 }
 
 static ScreenResult OnKey(SouthbridgeKeyEvent event) {
-  switch (ListBoxHandleKeyEvent(&g_list_box, event, kNumDriveTypes)) {
+  switch (ListBoxHandleKeyEvent(&g_list_box, event, Y_FDC_NUM_DRIVE_TYPES)) {
     case kListBoxActionSelect:
       *g_chosen = kDriveTypes[g_list_box.selected];
       return ScreenBack();
@@ -51,13 +47,17 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 static void OnDraw(DisplayBox* box) {
-  BoxItem items[kNumDriveTypes];
-  for (uint8_t i = 0; i < kNumDriveTypes; ++i) {
-    items[i] = (BoxItem){VMConfigFloppyDriveTypeLabel(kDriveTypes[i]), false};
+  BoxItem items[Y_FDC_NUM_DRIVE_TYPES];
+  for (uint8_t i = 0; i < Y_FDC_NUM_DRIVE_TYPES; ++i) {
+    const YFDCDriveType type = kDriveTypes[i];
+    items[i] = (BoxItem){
+        type == Y_FDC_DRIVE_TYPE_NONE ? "Standard (360KB/720KB)"
+                                      : VMConfigFloppyDriveTypeLabel(type),
+        false};
   }
   ListBoxDrawItems(
-      box, "Drive type", NULL, 0, items, kNumDriveTypes, g_list_box.selected,
-      true);
+      box, "Drive type", NULL, 0, items, Y_FDC_NUM_DRIVE_TYPES,
+      g_list_box.selected, true);
 }
 
 static const char* Hint(void) { return kListBoxHint; }

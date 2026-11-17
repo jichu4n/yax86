@@ -46,7 +46,7 @@ static const char* const kFloppyDriveTypeNames[Y_FDC_NUM_DRIVE_TYPES] = {
 };
 
 static const char* const kFloppyDriveTypeLabels[Y_FDC_NUM_DRIVE_TYPES] = {
-    [Y_FDC_DRIVE_TYPE_NONE] = "360KB",    [Y_FDC_DRIVE_TYPE_360KB] = "360KB",
+    [Y_FDC_DRIVE_TYPE_NONE] = "Standard", [Y_FDC_DRIVE_TYPE_360KB] = "360KB",
     [Y_FDC_DRIVE_TYPE_720KB] = "720KB",   [Y_FDC_DRIVE_TYPE_1200KB] = "1.2MB",
     [Y_FDC_DRIVE_TYPE_1440KB] = "1.44MB",
 };
@@ -68,7 +68,7 @@ const char* VMConfigFloppyDriveTypeName(YFDCDriveType type) {
 
 const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type) {
   return kFloppyDriveTypeLabels
-      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
+      [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_NONE];
 }
 
 static bool FloppyDriveTypeFromName(const char* name, YFDCDriveType* type) {

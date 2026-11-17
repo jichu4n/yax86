@@ -54,11 +54,6 @@ void FloppyOpen(
     } else {
       OpenDriveImage((FloppyDrive)drive, paths[drive]);
     }
-    if (g_drive_types[drive] == Y_FDC_DRIVE_TYPE_NONE) {
-      g_drive_types[drive] = g_formats[drive] == &YFDCFormat720KB
-                                 ? Y_FDC_DRIVE_TYPE_720KB
-                                 : Y_FDC_DRIVE_TYPE_360KB;
-    }
     opened[drive] = image->status;
   }
   for (uint8_t drive = 0; drive < kNumFloppyDrives; ++drive) {

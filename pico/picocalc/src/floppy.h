@@ -41,8 +41,8 @@ void FloppyAttach(YFDCState* fdc);
 // kDiskImageEjected.
 const DiskImage* FloppyGetImage(FloppyDrive drive);
 
-// The drive's mechanism type: its configured type, or for an unconfigured
-// stock XT drive, 720KB while a 720KB disk is in it and 360KB otherwise.
+// The drive's configured mechanism type, or Y_FDC_DRIVE_TYPE_NONE for the
+// standard drive taking 360KB and 720KB disks.
 YFDCDriveType FloppyGetDriveType(FloppyDrive drive);
 
 // The drive whose image is the one at path, or kNumFloppyDrives if none is.

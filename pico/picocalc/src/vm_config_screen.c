@@ -10,7 +10,6 @@
 #include "core/hdc.h"
 #include "disk_image.h"
 #include "display.h"
-#include "ff.h"
 #include "list_box.h"
 #include "pico/stdlib.h"
 #include "runtime_log.h"
@@ -74,28 +73,12 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
     g_drives[drive].path[0] = '\0';
     g_drives[drive].blank_size =
         drive == kVMDriveHD1 ? Y_HDC_GEOMETRY_10MB_IMAGE_SIZE : 0;
-    g_drives[drive].floppy_type = drive < kNumVMFloppyDrives
-                                      ? Y_FDC_DRIVE_TYPE_360KB
-                                      : Y_FDC_DRIVE_TYPE_NONE;
+    g_drives[drive].floppy_type = Y_FDC_DRIVE_TYPE_NONE;
     g_drives[drive].is_present = drive == kVMDriveFD1 || drive == kVMDriveHD1;
   }
   g_video_adapter = Y_VIDEO_ADAPTER_CGA;
   SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
-}
-
-static YFDCDriveType ExistingFloppyType(
-    const VMConfig* config, uint8_t floppy) {
-  if (config->floppy_types[floppy] != Y_FDC_DRIVE_TYPE_NONE) {
-    return config->floppy_types[floppy];
-  }
-  FILINFO info;
-  if (config->drives[floppy][0] != '\0' &&
-      f_stat(config->drives[floppy], &info) == FR_OK &&
-      info.fsize == Y_FDC_FORMAT_720KB_IMAGE_SIZE) {
-    return Y_FDC_DRIVE_TYPE_720KB;
-  }
-  return Y_FDC_DRIVE_TYPE_360KB;
 }
 
 ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
@@ -109,7 +92,7 @@ ScreenResult VMConfigScreenOpenExisting(VMManager* vm_manager, uint8_t index) {
     FSCopyPath(config.drives[drive], g_drives[drive].path);
     g_drives[drive].blank_size = 0;
     g_drives[drive].floppy_type = drive < kNumVMFloppyDrives
-                                      ? ExistingFloppyType(&config, drive)
+                                      ? config.floppy_types[drive]
                                       : Y_FDC_DRIVE_TYPE_NONE;
     g_drives[drive].is_present =
         drive == kVMDriveFD1 ||

@@ -18,9 +18,9 @@
 // a drive with no disk. A hard disk not named, or named as "", is not there:
 // a hard disk with no image is no disk at all. Floppy images are 360KB,
 // 720KB, 1.2MB or 1.44MB, checked against fd1_type and fd2_type (360k, 720k,
-// 1.2m or 1.44m, and 360k when not named, or 720k for a 720KB image), and
-// hard disk images the core's 10MB drive. video_adapter is cga or mda, and cga
-// when not named. Keys this firmware does not know are skipped.
+// 1.2m or 1.44m, and the standard drive taking 360KB and 720KB when not
+// named), and hard disk images the core's 10MB drive. video_adapter is cga or
+// mda, and cga when not named. Keys this firmware does not know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -82,8 +82,8 @@ typedef struct VMConfig {
 } VMConfig;
 
 // A floppy drive type's name in vm.cfg and the report (360k, 720k, 1.2m,
-// 1.44m), and its label in the menu and on the status page (360KB, 720KB,
-// 1.2MB, 1.44MB).
+// 1.44m, or empty for Y_FDC_DRIVE_TYPE_NONE), and its label in the menu and on
+// the status page (Standard, 360KB, 720KB, 1.2MB, 1.44MB).
 const char* VMConfigFloppyDriveTypeName(YFDCDriveType type);
 const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type);
 

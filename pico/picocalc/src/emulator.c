@@ -617,14 +617,8 @@ static bool InitVM(void) {
   config->video_adapter = VideoAdapter();
   config->num_floppy_drives = EmulatorSessionNumFloppyDrives(&g_session);
   for (uint8_t drive = 0; drive < config->num_floppy_drives; ++drive) {
-    const YFDCDriveType configured_type =
-        g_has_vm ? g_vm->floppy_types[drive] : Y_FDC_DRIVE_TYPE_NONE;
-    const YFDCDriveType drive_type = FloppyGetDriveType((FloppyDrive)drive);
     config->floppy_drive_types[drive] =
-        configured_type != Y_FDC_DRIVE_TYPE_NONE ||
-                drive_type != Y_FDC_DRIVE_TYPE_360KB
-            ? drive_type
-            : Y_FDC_DRIVE_TYPE_NONE;
+        g_has_vm ? g_vm->floppy_types[drive] : Y_FDC_DRIVE_TYPE_NONE;
   }
   config->video_text_font.glyphs = &(*Font4x10Glyphs(g_settings->font))[0][0];
   config->video_text_font.width = kFont4x10Width;

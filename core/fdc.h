@@ -1338,6 +1338,8 @@ Y_FILE_PRIVATE bool YFDCIsDataRateValid(
   } else if (drive_type == Y_FDC_DRIVE_TYPE_1200KB) {
     required_rate = Y_FDC_DATA_RATE_300KBPS;
   }
+  // Y_FDC_DATA_RATE_1MBPS (2.88MB extra-density) is not used by any supported
+  // drive type, so it never matches required_rate.
   return fdc->data_rate == required_rate;
 }
 
