@@ -66,9 +66,7 @@ enum {
       Y_PLATFORM_CYCLES_PER_PIT_TICK,
 
   // Never let a deadline sit further out than this, so that a machine in which
-  // nothing is scheduled still comes back regularly. Also capped at
-  // Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES so that next_event_ticks - ticks fits
-  // in YCPUTick()'s uint16_t max_run_cycles at high clock ratios.
+  // nothing is scheduled still comes back regularly.
   //
   // Note that this is not a bound on how many cycles accumulate between syncs.
   // A deadline is only tested between instructions, and a REP string
@@ -78,6 +76,8 @@ enum {
   // see Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS.
   Y_PLATFORM_MAX_EVENT_INTERVAL_PIT_TICKS =
       Y_PLATFORM_PIT_TICKS_PER_MILLISECOND,
+  // Cap the default event interval at UINT16_MAX so next_event_ticks - ticks
+  // fits in YCPUTick()'s uint16_t max_run_cycles at clock ratios above 54.
   Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES = 0xFFFF,
 
   // The furthest an idle skip may move the clock in one go, in PIT ticks (a

@@ -218,11 +218,16 @@ visibility, and how performance work is measured - are in the root
   to the timer, and at `4` every cycle count is identical to the 4.77MHz
   constants. The default 1ms event interval is capped at
   `Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES` (`0xFFFF`) so `next_event_ticks - ticks`
-  fits in `YCPUTick()`'s `uint16_t max_run_cycles` above ratio `54`. The video
-  adapter's geometry is in 4.77MHz cycles (`4` per PIT tick), so `YPlatformSync()`
-  passes `elapsed` at `4` and `pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK` above
-  `4` (passing `pit_ticks * 4` at `4` quantizes sub-tick elapsed cycles when
-  GLaBIOS polls `0x3DA` and moves `dos-boot` by 83 instructions).
+  fits in `YCPUTick()`'s `uint16_t max_run_cycles` above ratio `54`.
+- **The video beam advances by `elapsed` at `4` and `pit_ticks *
+  Y_PLATFORM_CYCLES_PER_PIT_TICK` above `4`.** The adapter's scan-line geometry
+  is in 4.77MHz cycles (`4` per PIT tick), and passing `pit_ticks * 4` at `4`
+  quantizes sub-tick elapsed cycles when GLaBIOS polls `0x3DA` and moves
+  `dos-boot` by 83 instructions (`2,397,299` vs `2,397,216`). Passing `elapsed *
+  4` without a branch and scaling `cycles_per_scan_line` and
+  `display_cycles_per_scan_line` on `YVideoState` by `cycles_per_pit_tick`
+  measured 3.7169s on the Pico 2 (`core .text` +224 bytes, `YPlatformState` +8
+  bytes) against 3.7107s for the branch in `YPlatformSync()`.
 - **`YPlatformSetCyclesPerPITTick()` syncs under the old ratio first, clamps
   pending remainders, and reschedules.** Without clamping `pit_cycles` to
   `cycles_per_pit_tick - 1` and `fdc_cycles` to `cycles_per_fdc_tick - 1`,
@@ -238,13 +243,16 @@ visibility, and how performance work is measured - are in the root
   shifts `pit_cycles` instead of dividing at 4.77MHz and power-of-two turbo
   steps. On the Pico 2 (`pico/bench`, 250MHz, `-O3`, 640KB paged), `dos-boot` at
   `4` takes 3.7107s with `pit_tick_shift` on `pit_cycles` (0.34% slower than
-  master's 3.6980s), against 3.7173s with a plain runtime divide; on the
+  master's 3.6980s), against 3.7173s with a plain runtime divide. On the
   Cortex-M0+, which has no divide instruction, `arm-none-eabi-objdump` of
-  `build-pico/O3/yax86_pico_bench.elf` shows the shift avoiding
-  `__aeabi_uidivmod` on the common path. `cycles_per_pit_tick` sits at the end
-  of `YPlatformState` and `pit_tick_shift` in the padding byte after
-  `is_guest_idle`, so no existing field offset moves and Thumb immediate load
-  offsets for earlier fields are unchanged.
+  `build-pico/O3/yax86_pico_bench.elf` shows `pit_tick_shift` avoiding
+  `__aeabi_uidivmod` on `pit_cycles`, while `fdc_cycles` (which crosses its
+  20-cycle threshold on almost every sync) still calls `__aeabi_uidivmod` with a
+  runtime divisor where `master` divided by a constant `20`; RP2040 hardware
+  timing remains unmeasured until an RP2040 board is connected.
+  `cycles_per_pit_tick` sits at the end of `YPlatformState` and `pit_tick_shift`
+  in the padding byte after `is_guest_idle`, so no existing field offset moves
+  and Thumb immediate load offsets for earlier fields are unchanged.
 
 ## platform - idle skipping
 
