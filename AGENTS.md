@@ -391,9 +391,11 @@ When asked to review a PR:
 When asked to respond to review comments on a PR:
 
 - **Evaluate each comment critically**, and push back where a suggestion does
-  not make sense or conflicts with the codebase's constraints.
-- **Do not act on the comments directly**: explain how you plan to respond and
-  confirm with the user before changing code, committing or posting on GitHub.
-- **Once confirmed and applied**, update the PR description to match and post a
-  follow-up comment on GitHub clearly naming the agent that posted it (for
-  example, `🤖 Generated with [Antigravity](https://antigravity.google)`).
+  not make sense, is speculative, or conflicts with the codebase's constraints.
+  Do not accept a reviewer's claim at face value just to resolve the comment.
+- **Act on the comments directly** without asking first, unless told otherwise:
+  make the changes that hold up, commit and push them, update the PR
+  description to match, and post a follow-up comment on the PR explaining what
+  changed and why you pushed back on anything you declined.
+- **Clearly name the agent** in the follow-up comment on GitHub (for example,
+  `🤖 Generated with [Antigravity](https://antigravity.google)`).
