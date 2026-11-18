@@ -1,0 +1,82 @@
+diff --git a/delay.inc b/delay.inc
+index 86d4f2b..f8c96cc 100644
+--- a/delay.inc
++++ b/delay.inc
+@@ -96,6 +96,44 @@ io_wait_latch:
+ ;	BX - trashed
+ ;-------------------------------------------------------------------------
+ fdc_wait_irq:
++%ifdef EMULATOR
++; An emulator advances a halted CPU without running instructions, so wait
++; for the IRQ with HLT, as GLaBIOS does with FDC_HLT_WAIT, rather than by
++; polling the PIT. The IRQ flag is tested with interrupts off, and STI only
++; takes effect after the instruction that follows it, so the IRQ cannot
++; arrive between the test and the HLT. It returns with interrupts enabled:
++; the wait only succeeds once the IRQ 6 handler has run, so every caller
++; that works already has them on.
++; The timeout counts BIOS timer ticks, since reading the PIT once per
++; wake-up would see the same count every 55 ms. So it needs IRQ 0 and the
++; INT 8 handler to advance the tick count, as GLaBIOS's wait does.
++	push	cx
++	mov	cx,18		; 17 to 18 timer ticks, the first being partial:
++			; 0.93 to 0.99 s. The PIT loop below counts
++			; 36 * 65536 at 2386364 Hz, 0.99 s
++	mov	bx,word [bios_ticks]	; BX = last timer tick count seen
++.halt_loop:
++	cli
++	test	byte [fdc_calib_state],fdc_irq_flag
++	jnz	.halt_exit
++	sti
++	hlt			; wait for the next interrupt
++	cmp	bx,word [bios_ticks]
++	je	.halt_loop	; not a timer tick: test the IRQ flag again
++	mov	bx,word [bios_ticks]
++	loop	.halt_loop	; count the tick, and wait on unless timed out
++	mov	ah,fdc_e_timeout
++	stc
++	pop	cx
++	ret
++
++.halt_exit:
++	sti
++	and	byte [fdc_calib_state],~fdc_irq_flag	; clear IRQ flag
++	xor	ah,ah		; AH = 0, CF = 0 - no error
++	pop	cx
++	ret
++%else
+ 	push	cx
+ 	push	dx
+ 	mov	bx,0		; DX:BX = countdown of pit ticks to wait
+@@ -123,3 +161,4 @@ fdc_wait_irq:
+ 	pop	dx
+ 	pop	cx
+ 	ret
++%endif
+diff --git a/floppy1.inc b/floppy1.inc
+index 33af64a..2e36270 100644
+--- a/floppy1.inc
++++ b/floppy1.inc
+@@ -716,6 +716,11 @@ fdc_seek:
+ 	stc
+ 	je	.set_result		; seek error
+ 	call	set_cylinder		; save new cylinder number
++%ifdef EMULATOR
++; An emulated head is over the new cylinder as soon as the seek completes, so
++; skip the head settle time, as GLaBIOS's ARCH_EMU build does.
++	jmp	.wait_end
++%endif
+ 
+ 	push	ds
+ 	lds	si,[1Eh*4]		; DS:SI -> INT 1Eh
+diff --git a/floppy_bios.asm b/floppy_bios.asm
+index 8fe1916..1f08b03 100644
+--- a/floppy_bios.asm
++++ b/floppy_bios.asm
+@@ -65,6 +65,7 @@ fdc_motor_tout	equ	440h	; byte - floppy drive motor off timeout (ticks)
+ fdc_last_error	equ	441h	; byte - status of last diskette operation
+ fdc_ctrl_status	equ	442h	; byte[7] - FDC status bytes
+ warm_boot	equ	472h	; word - Warm boot if equals 1234h
++bios_ticks	equ	46Ch	; word - timer ticks since midnight, low word
+ fdc_last_rate	equ	48Bh	; byte - last data rate / step rate
+ fdc_info	equ	48Fh	; byte - floppy dist drive information
+ fdc_media_state	equ	490h	; byte[4] - drive media state (drives 0 - 3)

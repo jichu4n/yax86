@@ -298,8 +298,9 @@ visibility, and how performance work is measured - are in the root
   `Recalibrate` while a disk is in the drive.
 - **Floppy BIOS support comes from an option ROM, always mapped at `0xCC000`**:
   Sergey Kiselev's Multi-Floppy BIOS Extension 2.7
-  (`core/src/fdc/Multi_Floppy_BIOS_2.7.rom`, built from `skiselev/floppy_bios`
-  by `tools/build-fdc-option-rom.sh` and checked against its SHA-256), compiled
+  (`core/src/fdc/Multi_Floppy_BIOS_2.7_emu.rom`, built from
+  `skiselev/floppy_bios` with the patch below by
+  `tools/build-fdc-option-rom.sh` and checked against its SHA-256), compiled
   in and mapped at `0xCC000-0xCDFFF` (clear of the XTIDE ROM at `0xC8000-0xCAFFF`
   and aligned to the memory map's 4KB pages). GLaBIOS is an 8KB PC/XT BIOS with
   no `INT 13h AH=08h/15h/16h/17h/18h`, data-rate probing, disk-change handling
@@ -320,6 +321,43 @@ visibility, and how performance work is measured - are in the root
   block at `0x1FC0`, goes through `.read_byte_fn` (`YFDCReadOptionROMByte()`) -
   1.20% faster on `dos-boot` (6.4191s against 6.4972s at 250MHz, `-O3`) than
   routing the whole 8KB through `.read_byte_fn`.
+- **The ROM is built patched for an emulator**: `tools/floppy_bios-emu.patch`
+  puts two changes under `%ifdef EMULATOR`, and the build script assembles
+  with `-DEMULATOR`. It first checks that upstream, and the patched source
+  without `EMULATOR`, both build upstream's `floppy_bios.bin` byte for byte,
+  so the patch is the whole difference. Upstream does all its waiting by
+  polling the PIT, which an emulator pays for in instructions; GLaBIOS's
+  `ARCH_EMU` build halts or skips the same waits.
+  - **`fdc_wait_irq` waits with `HLT`**, as GLaBIOS's `FDC_HLT_WAIT` does. The
+    IRQ flag is tested with interrupts off and `sti` is followed directly by
+    `hlt`, so the IRQ cannot slip in between. It returns with interrupts
+    enabled, where upstream keeps IF: the wait only succeeds once the IRQ 6
+    handler has run, so every caller that works has them on already. The
+    timeout counts BIOS timer ticks, since one PIT reading per wake-up sees
+    the same count every 55ms: 18 ticks, the first partial, so 0.93 to 0.99s
+    against the 0.99s upstream's loop really waits (36 x 65536 counts at
+    2,386,364Hz, mode 3 counting by two), not the 2 seconds its comment says.
+    A drive that never interrupts gives DOS's "Not ready" after the same
+    emulated time as upstream.
+  - **The timeout needs the timer to tick**, where upstream reads the PIT
+    itself: a guest that masks IRQ 0, or hooks `INT 8` without chaining, and
+    then reaches a controller that never interrupts would wait for good.
+    GLaBIOS's own `HLT` wait has the same dependence, and such a guest has
+    stopped the BIOS clock too. The emulated controller always interrupts -
+    an empty drive answers in 0.20s - so it does not happen here.
+  - **The head settle time after a seek is skipped**, as GLaBIOS's
+    `ARCH_EMU` build skips `FDC_SEEK_SETTLE`: upstream waits 15ms after every
+    seek, reads included (byte 9 of all its parameter tables is `0Fh`). The
+    code is patched rather than the tables, which `INT 1Eh` shows the guest.
+  - `dos-boot` at 250MHz, `-O3`, 640KB paged: 6.419s and 2,682,650
+    instructions unpatched, 6.399s with the head settle skipped, 6.075s with
+    `HLT`, and 6.064s and 2,397,216 with both. Before the ROM was mapped it was
+    5.785s and 2,353,188. What remains is the ROM's own code and GLaBIOS's
+    POST finding it - the halted time is the same as GLaBIOS's own `HLT`
+    waits - and a halted tick is not free: it is `Y_CPU_HALTED_CYCLES` (4)
+    cycles of the run loop.
+  - Copying and formatting gain more than the boot: `FORMAT B: /S` and a
+    `COPY` to a 1.44MB disk take 3.98 million instructions instead of 9.91.
 - **Read ID (`0x0A`) and Format Track (`0x0D`) map an 80-track 1.2MB drive's
   physical head position (`drive->track`) to a 40-track 360KB image's cylinder
   with `drive->track >> 1` (`YFDCDiskCylinderForDrive()`)**: when the option

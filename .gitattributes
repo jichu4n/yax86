@@ -9,3 +9,7 @@ core/*.h linguist-generated=true
 # The ROM images as C arrays, from core/tools/generate-rom-data-files.js.
 core/src/*/*_rom_data.c linguist-generated=true
 core/src/*/*_rom_data.h linguist-generated=true
+
+# The floppy_bios patch applies to CRLF sources, so its lines keep their CRLF
+# endings and git must never convert them.
+tools/floppy_bios-emu.patch -text
