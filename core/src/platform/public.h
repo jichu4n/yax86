@@ -520,9 +520,10 @@ typedef struct YPlatformState {
   // I/O port map.
   YPlatformPortMap io_port_map;
 
-  // How many CPU clock cycles have run, at 4.77MHz. Every device in the
-  // machine is clocked from this, so that what the guest measures with the
-  // timer matches how long it spent executing.
+  // How many CPU clock cycles have run. Every device in the machine is
+  // clocked from this, at cycles_per_pit_tick cycles per PIT tick, so that
+  // what the guest measures with the timer matches how long it spent
+  // executing.
   uint32_t ticks;
 
   // Cycles counted towards each device's next tick but not yet used by it.
@@ -548,6 +549,10 @@ typedef struct YPlatformState {
   // YPlatformRun() once it has skipped the idle time. Only ever set while the
   // idle skip is on.
   bool is_guest_idle;
+  // log2(cycles_per_pit_tick) when cycles_per_pit_tick is a power of two (such
+  // as 4 at 4.77MHz), or 0 otherwise, so YPlatformSync() can shift instead of
+  // dividing on targets without a divide instruction.
+  uint8_t pit_tick_shift;
 
   // Value of ticks when the devices were last brought up to date.
   uint32_t last_sync_ticks;
@@ -555,6 +560,11 @@ typedef struct YPlatformState {
   // as a signed difference against ticks so that it stays correct when the
   // 32-bit cycle counter wraps.
   uint32_t next_event_ticks;
+
+  // CPU clock cycles per 1.193MHz PIT tick, at least
+  // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Set by YPlatformInit() and
+  // YPlatformSetCyclesPerPITTick().
+  uint32_t cycles_per_pit_tick;
 
 } YPlatformState;
 
@@ -609,6 +619,30 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 // is nowhere near this.
 Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
+
+// Set the number of CPU clock cycles per 1.193MHz PIT tick, at least
+// Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Values below 4 are clamped
+// to 4.
+//
+// The FDC and keyboard ticks, the event interval and the idle-skip cap scale
+// with this ratio, so every device follows the same guest time while the CPU
+// runs faster relative to the timer.
+//
+// Brings every device up to date under the previous ratio first, then clamps
+// the cycles already credited towards the next PIT, FDC and keyboard ticks and
+// reschedules the next device deadline.
+Y_PUBLIC void YPlatformSetCyclesPerPITTick(
+    YPlatformState* platform, uint32_t cycles_per_pit_tick);
+
+// The CPU clock, in cycles per second, at the platform's current
+// cycles_per_pit_tick: Y_PLATFORM_CPU_CYCLES_PER_SECOND (4,772,727) at 4,
+// scaling linearly with the ratio.
+Y_PUBLIC_HEADER inline uint32_t YPlatformGetCPUCyclesPerSecond(
+    const YPlatformState* platform) {
+  return (uint32_t)((uint64_t)Y_PLATFORM_CPU_CYCLES_PER_SECOND *
+                    platform->cycles_per_pit_tick /
+                    Y_PLATFORM_CYCLES_PER_PIT_TICK);
+}
 
 // Turn on or off skipping emulated time when the guest says it has nothing to
 // do. Off after YPlatformInit(), and may be switched at any point after it.

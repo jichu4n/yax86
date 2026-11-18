@@ -202,6 +202,41 @@ visibility, and how performance work is measured - are in the root
   paged. A direct access is a compare and a load, a paged one a call and two
   more loads. `pico/picocalc` builds both; see its `AGENTS.md`.
 
+## platform - the CPU clock ratio
+
+- **`cycles_per_pit_tick` is the number of CPU cycles per 1.193MHz PIT tick**,
+  at least `Y_PLATFORM_CYCLES_PER_PIT_TICK` (`4`, for the PC/XT's 4.77MHz).
+  `YPlatformInit()` sets it to `4`, and `YPlatformSetCyclesPerPITTick()` changes
+  it between runs, clamping values below `4` to `4`;
+  `YPlatformGetCPUCyclesPerSecond()` returns the corresponding CPU clock in
+  cycles per second (`Y_PLATFORM_CPU_CYCLES_PER_SECOND`, `4,772,727`, at `4`).
+- **The FDC and keyboard ticks, the event interval and the idle-skip cap scale
+  with it**, as integer multiples of a PIT tick (`5` PIT ticks per FDC tick,
+  `1,193` per millisecond, `119,318` per tenth-second idle-skip ceiling), so
+  every device follows the same guest time while the CPU runs faster relative to
+  the timer, and at `4` every cycle count is identical to the 4.77MHz constants.
+- **`YPlatformSetCyclesPerPITTick()` syncs under the old ratio first, clamps
+  pending remainders, and reschedules.** Without clamping `pit_cycles` to
+  `cycles_per_pit_tick - 1` and `fdc_cycles` to `cycles_per_fdc_tick - 1`,
+  lowering the ratio below a stored remainder makes
+  `pit_ticks * cycles_per_pit_tick - platform->pit_cycles` in
+  `YPlatformCyclesUntilNextEvent()` underflow and wrap past `2^31`, missing the
+  device deadline. Rescheduling goes through a second `YPlatformSync()` (where
+  `elapsed == 0`) rather than a third direct call to
+  `YPlatformCyclesUntilNextEvent()`, which would stop GCC inlining
+  `YPlatformCyclesUntilNextEvent()` into `YPlatformSync()` in SRAM.
+- **`pit_tick_shift` holds `log2(cycles_per_pit_tick)` for power-of-two ratios**
+  (`2` at `4`, `3` at `8`, and `0` when not a power of two) so `YPlatformSync()`
+  shifts `pit_cycles` instead of dividing at 4.77MHz and power-of-two turbo
+  steps. On the Pico 2 (`pico/bench`, 250MHz, `-O3`, 640KB paged), `dos-boot` at
+  `4` takes 3.7014s with `pit_tick_shift` on `pit_cycles` (within 0.09% of
+  master's 3.6980s), against 3.7109s with a plain runtime divide and 3.7064s
+  when `fdc_cycles` and `keyboard_cycles` also branch on `pit_tick_shift`; on
+  the Cortex-M0+, which has no divide instruction, the shift avoids calling
+  `__aeabi_uidivmod` on every device sync. `cycles_per_pit_tick` sits at the end
+  of `YPlatformState` and `pit_tick_shift` in the padding byte after
+  `is_guest_idle`, so no existing field offset moves.
+
 ## platform - idle skipping
 
 - MS-DOS waits for a key by polling, never halting: at the 3.30 prompt the

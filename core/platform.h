@@ -540,9 +540,10 @@ typedef struct YPlatformState {
   // I/O port map.
   YPlatformPortMap io_port_map;
 
-  // How many CPU clock cycles have run, at 4.77MHz. Every device in the
-  // machine is clocked from this, so that what the guest measures with the
-  // timer matches how long it spent executing.
+  // How many CPU clock cycles have run. Every device in the machine is
+  // clocked from this, at cycles_per_pit_tick cycles per PIT tick, so that
+  // what the guest measures with the timer matches how long it spent
+  // executing.
   uint32_t ticks;
 
   // Cycles counted towards each device's next tick but not yet used by it.
@@ -568,6 +569,10 @@ typedef struct YPlatformState {
   // YPlatformRun() once it has skipped the idle time. Only ever set while the
   // idle skip is on.
   bool is_guest_idle;
+  // log2(cycles_per_pit_tick) when cycles_per_pit_tick is a power of two (such
+  // as 4 at 4.77MHz), or 0 otherwise, so YPlatformSync() can shift instead of
+  // dividing on targets without a divide instruction.
+  uint8_t pit_tick_shift;
 
   // Value of ticks when the devices were last brought up to date.
   uint32_t last_sync_ticks;
@@ -575,6 +580,11 @@ typedef struct YPlatformState {
   // as a signed difference against ticks so that it stays correct when the
   // 32-bit cycle counter wraps.
   uint32_t next_event_ticks;
+
+  // CPU clock cycles per 1.193MHz PIT tick, at least
+  // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Set by YPlatformInit() and
+  // YPlatformSetCyclesPerPITTick().
+  uint32_t cycles_per_pit_tick;
 
 } YPlatformState;
 
@@ -629,6 +639,30 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 // is nowhere near this.
 Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
+
+// Set the number of CPU clock cycles per 1.193MHz PIT tick, at least
+// Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Values below 4 are clamped
+// to 4.
+//
+// The FDC and keyboard ticks, the event interval and the idle-skip cap scale
+// with this ratio, so every device follows the same guest time while the CPU
+// runs faster relative to the timer.
+//
+// Brings every device up to date under the previous ratio first, then clamps
+// the cycles already credited towards the next PIT, FDC and keyboard ticks and
+// reschedules the next device deadline.
+Y_PUBLIC void YPlatformSetCyclesPerPITTick(
+    YPlatformState* platform, uint32_t cycles_per_pit_tick);
+
+// The CPU clock, in cycles per second, at the platform's current
+// cycles_per_pit_tick: Y_PLATFORM_CPU_CYCLES_PER_SECOND (4,772,727) at 4,
+// scaling linearly with the ratio.
+Y_PUBLIC_HEADER inline uint32_t YPlatformGetCPUCyclesPerSecond(
+    const YPlatformState* platform) {
+  return (uint32_t)((uint64_t)Y_PLATFORM_CPU_CYCLES_PER_SECOND *
+                    platform->cycles_per_pit_tick /
+                    Y_PLATFORM_CYCLES_PER_PIT_TICK);
+}
 
 // Turn on or off skipping emulated time when the guest says it has nothing to
 // do. Off after YPlatformInit(), and may be switched at any point after it.
@@ -736,6 +770,18 @@ Y_FILE_PRIVATE void YPlatformUpdateDirectDataWindow(YPlatformState* platform);
 Y_FILE_PRIVATE void YPlatformUpdatePagedDataWindow(YPlatformState* platform);
 
 enum {
+  // log2(Y_PLATFORM_CYCLES_PER_PIT_TICK) for the default 4 cycles per PIT tick.
+  Y_PLATFORM_DEFAULT_PIT_TICK_SHIFT = 2,
+
+  // PIT ticks per FDC state-machine tick and per millisecond. Derived from the
+  // 4.77MHz constants so that at Y_PLATFORM_CYCLES_PER_PIT_TICK (4) the cycle
+  // counts are identical, and at higher ratios every device scales with the
+  // PIT.
+  Y_PLATFORM_PIT_TICKS_PER_FDC_TICK = Y_PLATFORM_CYCLES_PER_FDC_TICK /
+      Y_PLATFORM_CYCLES_PER_PIT_TICK,
+  Y_PLATFORM_PIT_TICKS_PER_MILLISECOND = Y_PLATFORM_CYCLES_PER_MILLISECOND /
+      Y_PLATFORM_CYCLES_PER_PIT_TICK,
+
   // Never let a deadline sit further out than this, so that a machine in which
   // nothing is scheduled still comes back regularly.
   //
@@ -744,10 +790,12 @@ enum {
   // instruction retires as a single tick charging thousands of cycles, so a
   // sync interval routinely runs past it - measured at 27,844 cycles, or
   // 5.8ms, over a DOS boot. Anything relying on a bound has to impose its own;
-  // see Y_PLATFORM_MAX_IDLE_SKIP_CYCLES.
-  Y_PLATFORM_MAX_EVENT_INTERVAL = Y_PLATFORM_CYCLES_PER_MILLISECOND,
+  // see Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS.
+  Y_PLATFORM_MAX_EVENT_INTERVAL_PIT_TICKS =
+      Y_PLATFORM_PIT_TICKS_PER_MILLISECOND,
 
-  // The furthest an idle skip may move the clock in one go.
+  // The furthest an idle skip may move the clock in one go, in PIT ticks (a
+  // tenth of a second).
   //
   // A skip is otherwise bounded only by the budget its caller passed to
   // YPlatformRun(), which nothing checks. Every device's catch-up arithmetic in
@@ -757,6 +805,8 @@ enum {
   // of them in a single call. A tenth of a second is far more than any sane
   // budget and far less than either limit.
   Y_PLATFORM_MAX_IDLE_SKIP_CYCLES = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 10,
+  Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS = Y_PLATFORM_MAX_IDLE_SKIP_CYCLES /
+      Y_PLATFORM_CYCLES_PER_PIT_TICK,
 };
 
 // Record a newly registered entry in the page index.
@@ -1886,14 +1936,17 @@ Y_PUBLIC bool YPlatformInit(YPlatformState* platform) {
   YPlatformInitVideo(platform);
 
   platform->ticks = 0;
+  platform->cycles_per_pit_tick = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+  platform->pit_tick_shift = Y_PLATFORM_DEFAULT_PIT_TICK_SHIFT;
   platform->pit_cycles = 0;
   platform->fdc_cycles = 0;
   platform->keyboard_cycles = 0;
   platform->last_sync_ticks = 0;
   // Schedule the first deadline from the devices' power-on state, so that the
   // first instruction is not treated as already overdue.
-  platform->next_event_ticks =
-      YPlatformCyclesUntilNextEvent(platform, Y_PLATFORM_MAX_EVENT_INTERVAL);
+  platform->next_event_ticks = YPlatformCyclesUntilNextEvent(
+      platform,
+      Y_PLATFORM_MAX_EVENT_INTERVAL_PIT_TICKS * platform->cycles_per_pit_tick);
 
   // Set before the two calls below, because each of them recomputes the
   // enabled flags and one of those is derived from this.
@@ -1945,20 +1998,21 @@ Y_FILE_PRIVATE inline bool YPlatformIsEventDue(const YPlatformState* platform) {
 }
 
 // Work out when the next device needs attention, in cycles from now, up to
-// max_cycles. The instruction path passes Y_PLATFORM_MAX_EVENT_INTERVAL; the
+// max_cycles. The instruction path passes one millisecond of CPU cycles; the
 // idle skip passes what is left of the budget it was given, because there the
 // answer is how far the clock may be moved rather than how long until it is
 // checked again.
 Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
     const YPlatformState* platform, uint32_t max_cycles) {
   uint32_t cycles = max_cycles;
+  const uint32_t cycles_per_pit_tick = platform->cycles_per_pit_tick;
 
   // The PIT's next output change, converted from its own 1.19MHz clock and
   // offset by the cycles already credited towards its next tick.
   const uint32_t pit_ticks = YPITTicksUntilNextEvent(&platform->pit);
   if (pit_ticks != Y_PIT_NO_EVENT) {
     const uint32_t pit_cycles =
-        pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK - platform->pit_cycles;
+        pit_ticks * cycles_per_pit_tick - platform->pit_cycles;
     if (pit_cycles < cycles) {
       cycles = pit_cycles;
     }
@@ -1968,7 +2022,8 @@ Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
   // command is in flight there is nothing for a tick to do.
   if (platform->fdc.phase == Y_FDC_PHASE_EXECUTION) {
     const uint32_t fdc_cycles =
-        Y_PLATFORM_CYCLES_PER_FDC_TICK - platform->fdc_cycles;
+        Y_PLATFORM_PIT_TICKS_PER_FDC_TICK * cycles_per_pit_tick -
+        platform->fdc_cycles;
     if (fdc_cycles < cycles) {
       cycles = fdc_cycles;
     }
@@ -1983,21 +2038,29 @@ Y_FILE_PRIVATE uint32_t YPlatformCyclesUntilNextEvent(
 Y_PUBLIC Y_HOT void YPlatformSync(YPlatformState* platform) {
   const uint32_t elapsed = platform->ticks - platform->last_sync_ticks;
   platform->last_sync_ticks = platform->ticks;
+  const uint32_t cycles_per_pit_tick = platform->cycles_per_pit_tick;
+  const uint32_t cycles_per_millisecond =
+      Y_PLATFORM_PIT_TICKS_PER_MILLISECOND * cycles_per_pit_tick;
 
   if (elapsed > 0) {
     platform->pit_cycles += elapsed;
-    const uint32_t pit_ticks =
-        platform->pit_cycles / Y_PLATFORM_CYCLES_PER_PIT_TICK;
-    if (pit_ticks > 0) {
-      platform->pit_cycles -= pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK;
+    if (platform->pit_cycles >= cycles_per_pit_tick) {
+      const uint8_t shift = platform->pit_tick_shift;
+      const uint32_t pit_ticks =
+          shift != 0 ? platform->pit_cycles >> shift
+                     : platform->pit_cycles / cycles_per_pit_tick;
+      platform->pit_cycles =
+          shift != 0 ? platform->pit_cycles & (cycles_per_pit_tick - 1)
+                     : platform->pit_cycles - pit_ticks * cycles_per_pit_tick;
       YPITAdvance(&platform->pit, pit_ticks);
     }
 
+    const uint32_t cycles_per_fdc_tick =
+        Y_PLATFORM_PIT_TICKS_PER_FDC_TICK * cycles_per_pit_tick;
     platform->fdc_cycles += elapsed;
-    const uint32_t fdc_ticks =
-        platform->fdc_cycles / Y_PLATFORM_CYCLES_PER_FDC_TICK;
-    if (fdc_ticks > 0) {
-      platform->fdc_cycles -= fdc_ticks * Y_PLATFORM_CYCLES_PER_FDC_TICK;
+    if (platform->fdc_cycles >= cycles_per_fdc_tick) {
+      const uint32_t fdc_ticks = platform->fdc_cycles / cycles_per_fdc_tick;
+      platform->fdc_cycles -= fdc_ticks * cycles_per_fdc_tick;
       // YFDCTick() does nothing unless a command is executing, so an idle
       // controller does not need catching up at all - which matters because
       // an idle stretch is not bounded by an FDC deadline.
@@ -2009,11 +2072,10 @@ Y_PUBLIC Y_HOT void YPlatformSync(YPlatformState* platform) {
     }
 
     platform->keyboard_cycles += elapsed;
-    const uint32_t keyboard_ticks =
-        platform->keyboard_cycles / Y_PLATFORM_CYCLES_PER_MILLISECOND;
-    if (keyboard_ticks > 0) {
-      platform->keyboard_cycles -=
-          keyboard_ticks * Y_PLATFORM_CYCLES_PER_MILLISECOND;
+    if (platform->keyboard_cycles >= cycles_per_millisecond) {
+      const uint32_t keyboard_ticks =
+          platform->keyboard_cycles / cycles_per_millisecond;
+      platform->keyboard_cycles -= keyboard_ticks * cycles_per_millisecond;
       for (uint32_t i = 0; i < keyboard_ticks; ++i) {
         YKeyboardTickMs(&platform->keyboard);
       }
@@ -2026,7 +2088,7 @@ Y_PUBLIC Y_HOT void YPlatformSync(YPlatformState* platform) {
 
   platform->next_event_ticks =
       platform->ticks +
-      YPlatformCyclesUntilNextEvent(platform, Y_PLATFORM_MAX_EVENT_INTERVAL);
+      YPlatformCyclesUntilNextEvent(platform, cycles_per_millisecond);
 }
 
 // The body of both entry points. YPlatformTick() promises its caller one
@@ -2088,8 +2150,10 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform) {
 // the catch-up arithmetic.
 Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     YPlatformState* platform, uint32_t max_cycles) {
-  if (max_cycles > Y_PLATFORM_MAX_IDLE_SKIP_CYCLES) {
-    max_cycles = Y_PLATFORM_MAX_IDLE_SKIP_CYCLES;
+  const uint32_t max_idle_skip_cycles =
+      Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS * platform->cycles_per_pit_tick;
+  if (max_cycles > max_idle_skip_cycles) {
+    max_cycles = max_idle_skip_cycles;
   }
   const uint32_t cycles = YPlatformCyclesUntilNextEvent(platform, max_cycles);
   if (cycles == 0) {
@@ -2124,6 +2188,45 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
     }
   }
   return Y_PLATFORM_RUNNING;
+}
+
+Y_FILE_PRIVATE uint8_t
+YPlatformComputePITTickShift(uint32_t cycles_per_pit_tick) {
+  if ((cycles_per_pit_tick & (cycles_per_pit_tick - 1)) != 0) {
+    return 0;
+  }
+  uint8_t shift = 0;
+  while ((cycles_per_pit_tick >>= 1) != 0) {
+    ++shift;
+  }
+  return shift;
+}
+
+Y_PUBLIC void YPlatformSetCyclesPerPITTick(
+    YPlatformState* platform, uint32_t cycles_per_pit_tick) {
+  if (cycles_per_pit_tick < Y_PLATFORM_CYCLES_PER_PIT_TICK) {
+    cycles_per_pit_tick = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+  }
+  if (cycles_per_pit_tick == platform->cycles_per_pit_tick) {
+    return;
+  }
+  YPlatformSync(platform);
+  platform->cycles_per_pit_tick = cycles_per_pit_tick;
+  platform->pit_tick_shift = YPlatformComputePITTickShift(cycles_per_pit_tick);
+  if (platform->pit_cycles >= cycles_per_pit_tick) {
+    platform->pit_cycles = cycles_per_pit_tick - 1;
+  }
+  const uint32_t cycles_per_fdc_tick =
+      Y_PLATFORM_PIT_TICKS_PER_FDC_TICK * cycles_per_pit_tick;
+  if (platform->fdc_cycles >= cycles_per_fdc_tick) {
+    platform->fdc_cycles = cycles_per_fdc_tick - 1;
+  }
+  const uint32_t cycles_per_millisecond =
+      Y_PLATFORM_PIT_TICKS_PER_MILLISECOND * cycles_per_pit_tick;
+  if (platform->keyboard_cycles >= cycles_per_millisecond) {
+    platform->keyboard_cycles = cycles_per_millisecond - 1;
+  }
+  YPlatformSync(platform);
 }
 
 Y_PUBLIC void YPlatformSetDOSIdleSkip(
