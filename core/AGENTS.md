@@ -238,6 +238,14 @@ visibility, and how performance work is measured - are in the root
   `elapsed == 0`) rather than a third direct call to
   `YPlatformCyclesUntilNextEvent()`, which `arm-none-eabi-nm` showed stopped GCC
   inlining `YPlatformCyclesUntilNextEvent()` into `YPlatformSync()` in SRAM.
+  Conversely, replacing `YPlatformInit()`'s direct `YPlatformCyclesUntilNextEvent()`
+  call with `YPlatformSync()` changes GCC's unit-wide auto-inlining heuristic so
+  `YCPUReadByteFromPort()` is no longer auto-inlined into
+  `YCPUExecuteInImmediate()`, costing 0.49% on the Pico 2 (`3.7288s` vs
+  `3.7107s`); with `YPlatformInit()` calling `YPlatformCyclesUntilNextEvent()`
+  directly, `arm-none-eabi-nm -S` confirms no function outside `YPlatformSync()`
+  changes size (`YPlatformSync()` itself grows by 60 bytes from `0x2a0` to
+  `0x2dc` for the video scaling and `0xFFFF` interval cap).
 - **`pit_tick_shift` holds `log2(cycles_per_pit_tick)` for power-of-two ratios**
   (`2` at `4`, `3` at `8`, and `0` when not a power of two) so `YPlatformSync()`
   shifts `pit_cycles` instead of dividing at 4.77MHz and power-of-two turbo
