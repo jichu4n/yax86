@@ -66,7 +66,9 @@ enum {
       Y_PLATFORM_CYCLES_PER_PIT_TICK,
 
   // Never let a deadline sit further out than this, so that a machine in which
-  // nothing is scheduled still comes back regularly.
+  // nothing is scheduled still comes back regularly. Also capped at
+  // Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES so that next_event_ticks - ticks fits
+  // in YCPUTick()'s uint16_t max_run_cycles at high clock ratios.
   //
   // Note that this is not a bound on how many cycles accumulate between syncs.
   // A deadline is only tested between instructions, and a REP string
@@ -76,6 +78,7 @@ enum {
   // see Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS.
   Y_PLATFORM_MAX_EVENT_INTERVAL_PIT_TICKS =
       Y_PLATFORM_PIT_TICKS_PER_MILLISECOND,
+  Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES = 0xFFFF,
 
   // The furthest an idle skip may move the clock in one go, in PIT ticks (a
   // tenth of a second).
@@ -87,8 +90,7 @@ enum {
   // is caught up a millisecond per iteration, so it would also spend ~900,000
   // of them in a single call. A tenth of a second is far more than any sane
   // budget and far less than either limit.
-  Y_PLATFORM_MAX_IDLE_SKIP_CYCLES = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 10,
-  Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS = Y_PLATFORM_MAX_IDLE_SKIP_CYCLES /
+  Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS = (Y_PLATFORM_CPU_CYCLES_PER_SECOND / 10) /
       Y_PLATFORM_CYCLES_PER_PIT_TICK,
 };
 
@@ -1326,12 +1328,12 @@ Y_PUBLIC Y_HOT void YPlatformSync(YPlatformState* platform) {
       Y_PLATFORM_PIT_TICKS_PER_MILLISECOND * cycles_per_pit_tick;
 
   if (elapsed > 0) {
+    uint32_t pit_ticks = 0;
     platform->pit_cycles += elapsed;
     if (platform->pit_cycles >= cycles_per_pit_tick) {
       const uint8_t shift = platform->pit_tick_shift;
-      const uint32_t pit_ticks =
-          shift != 0 ? platform->pit_cycles >> shift
-                     : platform->pit_cycles / cycles_per_pit_tick;
+      pit_ticks = shift != 0 ? platform->pit_cycles >> shift
+                             : platform->pit_cycles / cycles_per_pit_tick;
       platform->pit_cycles =
           shift != 0 ? platform->pit_cycles & (cycles_per_pit_tick - 1)
                      : platform->pit_cycles - pit_ticks * cycles_per_pit_tick;
@@ -1365,13 +1367,22 @@ Y_PUBLIC Y_HOT void YPlatformSync(YPlatformState* platform) {
     }
 
     // Advancing the beam costs the same whether it moved by one cycle or a
-    // whole frame, so the video adapter needs no deadline of its own.
-    YVideoTick(&platform->video, elapsed);
+    // whole frame, so the video adapter needs no deadline of its own. The
+    // adapter's geometry is in 4.77MHz cycles (4 per PIT tick), so above 4
+    // cycles per PIT tick the beam advances from pit_ticks.
+    YVideoTick(
+        &platform->video, cycles_per_pit_tick == Y_PLATFORM_CYCLES_PER_PIT_TICK
+                              ? elapsed
+                              : pit_ticks * Y_PLATFORM_CYCLES_PER_PIT_TICK);
   }
 
+  const uint32_t max_event_interval =
+      cycles_per_millisecond <= Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES
+          ? cycles_per_millisecond
+          : Y_PLATFORM_MAX_EVENT_INTERVAL_CYCLES;
   platform->next_event_ticks =
       platform->ticks +
-      YPlatformCyclesUntilNextEvent(platform, cycles_per_millisecond);
+      YPlatformCyclesUntilNextEvent(platform, max_event_interval);
 }
 
 // The body of both entry points. YPlatformTick() promises its caller one
@@ -1428,9 +1439,9 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform) {
 //
 // The bound matters as much as the skip: without it a machine idling at a DOS
 // prompt would be handed more emulated time per call than the caller asked for,
-// and would run its clock fast. Y_PLATFORM_MAX_IDLE_SKIP_CYCLES bounds it a
-// second time, in case the caller's budget is itself large enough to overflow
-// the catch-up arithmetic.
+// and would run its clock fast. Y_PLATFORM_MAX_IDLE_SKIP_PIT_TICKS scaled by
+// cycles_per_pit_tick bounds it a second time, in case the caller's budget is
+// itself large enough to overflow the catch-up arithmetic.
 Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     YPlatformState* platform, uint32_t max_cycles) {
   const uint32_t max_idle_skip_cycles =
@@ -1473,6 +1484,9 @@ YPlatformRun(YPlatformState* platform, uint32_t max_cycles) {
   return Y_PLATFORM_RUNNING;
 }
 
+// Returns log2(cycles_per_pit_tick) when cycles_per_pit_tick is a power of two,
+// or 0 otherwise. 0 is unambiguous because cycles_per_pit_tick is at least 4,
+// so any power of two has shift >= 2.
 Y_FILE_PRIVATE uint8_t
 YPlatformComputePITTickShift(uint32_t cycles_per_pit_tick) {
   if ((cycles_per_pit_tick & (cycles_per_pit_tick - 1)) != 0) {
@@ -1489,6 +1503,8 @@ Y_PUBLIC void YPlatformSetCyclesPerPITTick(
     YPlatformState* platform, uint32_t cycles_per_pit_tick) {
   if (cycles_per_pit_tick < Y_PLATFORM_CYCLES_PER_PIT_TICK) {
     cycles_per_pit_tick = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+  } else if (cycles_per_pit_tick > Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK) {
+    cycles_per_pit_tick = Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK;
   }
   if (cycles_per_pit_tick == platform->cycles_per_pit_tick) {
     return;

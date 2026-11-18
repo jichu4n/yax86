@@ -462,8 +462,12 @@ enum {
   // Cycles per millisecond, near enough for the devices that want one.
   Y_PLATFORM_CYCLES_PER_MILLISECOND = Y_PLATFORM_CPU_CYCLES_PER_SECOND / 1000,
   // The PIT is clocked at 1.193MHz, the same crystal divided by twelve, which
-  // is a quarter of the CPU clock.
+  // is a quarter of the CPU clock. Also the minimum value for
+  // cycles_per_pit_tick.
   Y_PLATFORM_CYCLES_PER_PIT_TICK = 4,
+  // Maximum value for cycles_per_pit_tick (64x 4.77MHz, ~305.5MHz), keeping
+  // all 32-bit cycle products and deadlines within range.
+  Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK = 256,
   // How often to step the floppy controller's state machine. This is not a
   // clock ratio - the controller is a state machine here rather than a
   // modelled device - so it keeps the rate it had before cycles were counted,
@@ -521,9 +525,8 @@ typedef struct YPlatformState {
   YPlatformPortMap io_port_map;
 
   // How many CPU clock cycles have run. Every device in the machine is
-  // clocked from this, at cycles_per_pit_tick cycles per PIT tick, so that
-  // what the guest measures with the timer matches how long it spent
-  // executing.
+  // clocked from this, scaled by cycles_per_pit_tick so that what the guest
+  // measures with the timer and video retrace matches guest time.
   uint32_t ticks;
 
   // Cycles counted towards each device's next tick but not yet used by it.
@@ -561,8 +564,9 @@ typedef struct YPlatformState {
   // 32-bit cycle counter wraps.
   uint32_t next_event_ticks;
 
-  // CPU clock cycles per 1.193MHz PIT tick, at least
-  // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Set by YPlatformInit() and
+  // CPU clock cycles per 1.193MHz PIT tick, between
+  // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz) and
+  // Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK (256). Set by YPlatformInit() and
   // YPlatformSetCyclesPerPITTick().
   uint32_t cycles_per_pit_tick;
 
@@ -620,13 +624,13 @@ Y_PUBLIC YPlatformRunStatus YPlatformTick(YPlatformState* platform);
 Y_PUBLIC YPlatformRunStatus
 YPlatformRun(YPlatformState* platform, uint32_t max_cycles);
 
-// Set the number of CPU clock cycles per 1.193MHz PIT tick, at least
-// Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz). Values below 4 are clamped
-// to 4.
+// Set the number of CPU clock cycles per 1.193MHz PIT tick, clamped to
+// [Y_PLATFORM_CYCLES_PER_PIT_TICK, Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK] (4 to
+// 256).
 //
-// The FDC and keyboard ticks, the event interval and the idle-skip cap scale
-// with this ratio, so every device follows the same guest time while the CPU
-// runs faster relative to the timer.
+// The FDC, keyboard and video ticks, the event interval and the idle-skip cap
+// scale with this ratio, so every device follows the same guest time while the
+// CPU runs faster relative to the timer.
 //
 // Brings every device up to date under the previous ratio first, then clamps
 // the cycles already credited towards the next PIT, FDC and keyboard ticks and

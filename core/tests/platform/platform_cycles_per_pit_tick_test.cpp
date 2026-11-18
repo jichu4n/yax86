@@ -102,6 +102,37 @@ TEST_F(PlatformCyclesPerPITTickTest, DefaultsToFourAndClampsBelowFour) {
   }
 }
 
+TEST_F(
+    PlatformCyclesPerPITTickTest,
+    ClampsAboveMaxAndCapsDefaultEventIntervalAtUint16Max) {
+  for (uint32_t above :
+       {static_cast<uint32_t>(Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK) + 1u, 1000u,
+        0xFFFFFFFFu}) {
+    YPlatformSetCyclesPerPITTick(&platform_, above);
+    EXPECT_EQ(
+        platform_.cycles_per_pit_tick,
+        static_cast<uint32_t>(Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK));
+    EXPECT_EQ(platform_.pit_tick_shift, 8u);
+    EXPECT_EQ(
+        YPlatformGetCPUCyclesPerSecond(&platform_),
+        static_cast<uint32_t>(
+            static_cast<uint64_t>(Y_PLATFORM_CPU_CYCLES_PER_SECOND) *
+            Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK /
+            Y_PLATFORM_CYCLES_PER_PIT_TICK));
+    // At ratio 256, 1ms is 1,193 * 256 = 305,408 cycles, which exceeds
+    // YCPUTick()'s uint16_t max_run_cycles; the default event deadline must be
+    // capped at 0xFFFF.
+    EXPECT_EQ(platform_.next_event_ticks - platform_.ticks, 0xFFFFu);
+  }
+
+  // At ratio 64 (16x), 1ms is 1,193 * 64 = 76,352 cycles, also capped at
+  // 0xFFFF.
+  YPlatformSetCyclesPerPITTick(&platform_, 64);
+  EXPECT_EQ(platform_.cycles_per_pit_tick, 64u);
+  EXPECT_EQ(platform_.pit_tick_shift, 6u);
+  EXPECT_EQ(platform_.next_event_ticks - platform_.ticks, 0xFFFFu);
+}
+
 TEST_F(PlatformCyclesPerPITTickTest, TracksShiftAndCyclesPerSecondAt4And6And8) {
   YPlatformSetCyclesPerPITTick(&platform_, 6);
   EXPECT_EQ(platform_.cycles_per_pit_tick, 6u);
@@ -294,6 +325,58 @@ TEST_F(PlatformCyclesPerPITTickTest, KeyboardTicksScaleWithRatioAt4And6And8) {
     AdvanceCycles(cycles_per_ms);
     EXPECT_EQ(YPlatformReadPortByte(&platform_, 0x60), 0xAA)
         << "20ms should complete reset at ratio=" << ratio;
+  }
+}
+
+TEST_F(PlatformCyclesPerPITTickTest, VideoTimingScalesWithRatioAt4And6And8) {
+  // CGA: 304 4.77MHz cycles (76 PIT ticks) per scan line, 200 displayed scan
+  // lines before vertical retrace, 262 scan lines per frame.
+  constexpr uint32_t kPITTicksPerScanLine =
+      304 / Y_PLATFORM_CYCLES_PER_PIT_TICK;
+  constexpr uint32_t kDisplayedScanLines = 200;
+  constexpr uint32_t kScanLinesPerFrame = 262;
+
+  for (uint32_t ratio : {4u, 6u, 8u}) {
+    platform_ = YPlatformState{};
+    platform_.config.direct_memory_size = sizeof(ram_);
+    platform_.config.direct_memory = ram_;
+    platform_.config.vram = vram_;
+    platform_.config.video_adapter = Y_VIDEO_ADAPTER_CGA;
+    ASSERT_TRUE(YPlatformInit(&platform_));
+    YPlatformSetCyclesPerPITTick(&platform_, ratio);
+
+    // One scan line short of vertical retrace (scan line 199): vertical retrace
+    // is still clear.
+    AdvanceCycles((kDisplayedScanLines - 1) * kPITTicksPerScanLine * ratio);
+    EXPECT_EQ(platform_.video.scan_line, 199u) << "ratio=" << ratio;
+    EXPECT_EQ(
+        YPlatformReadPortByte(&platform_, Y_VIDEO_CGA_PORT_STATUS) &
+            Y_VIDEO_STATUS_VERTICAL_RETRACE,
+        0)
+        << "ratio=" << ratio;
+
+    // One more scan line reaches scan line 200 and enters vertical retrace.
+    AdvanceCycles(kPITTicksPerScanLine * ratio);
+    EXPECT_EQ(platform_.video.scan_line, 200u) << "ratio=" << ratio;
+    EXPECT_NE(
+        YPlatformReadPortByte(&platform_, Y_VIDEO_CGA_PORT_STATUS) &
+            Y_VIDEO_STATUS_VERTICAL_RETRACE,
+        0)
+        << "ratio=" << ratio;
+    EXPECT_EQ(platform_.video.num_frames, 0u) << "ratio=" << ratio;
+
+    // The remaining 62 scan lines complete the first frame and return to scan
+    // line 0.
+    AdvanceCycles(
+        (kScanLinesPerFrame - kDisplayedScanLines) * kPITTicksPerScanLine *
+        ratio);
+    EXPECT_EQ(platform_.video.scan_line, 0u) << "ratio=" << ratio;
+    EXPECT_EQ(platform_.video.num_frames, 1u) << "ratio=" << ratio;
+    EXPECT_EQ(
+        YPlatformReadPortByte(&platform_, Y_VIDEO_CGA_PORT_STATUS) &
+            Y_VIDEO_STATUS_VERTICAL_RETRACE,
+        0)
+        << "ratio=" << ratio;
   }
 }
 
