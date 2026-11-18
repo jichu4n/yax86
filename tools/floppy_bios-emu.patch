@@ -2,7 +2,7 @@ diff --git a/delay.inc b/delay.inc
 index 86d4f2b..f8c96cc 100644
 --- a/delay.inc
 +++ b/delay.inc
-@@ -96,6 +96,39 @@ io_wait_latch:
+@@ -96,6 +96,44 @@ io_wait_latch:
  ;	BX - trashed
  ;-------------------------------------------------------------------------
  fdc_wait_irq:
@@ -11,11 +11,16 @@ index 86d4f2b..f8c96cc 100644
 +; for the IRQ with HLT, as GLaBIOS does with FDC_HLT_WAIT, rather than by
 +; polling the PIT. The IRQ flag is tested with interrupts off, and STI only
 +; takes effect after the instruction that follows it, so the IRQ cannot
-+; arrive between the test and the HLT. The timeout counts BIOS timer ticks:
-+; reading the PIT once per wake-up would see the same count every 55 ms.
++; arrive between the test and the HLT. It returns with interrupts enabled:
++; the wait only succeeds once the IRQ 6 handler has run, so every caller
++; that works already has them on.
++; The timeout counts BIOS timer ticks, since reading the PIT once per
++; wake-up would see the same count every 55 ms. So it needs IRQ 0 and the
++; INT 8 handler to advance the tick count, as GLaBIOS's wait does.
 +	push	cx
-+	mov	cx,18		; about 1 second, in 55 ms timer ticks: the PIT loop
-+			; below counts 36 * 65536 at 2386364 Hz, 0.99 s
++	mov	cx,18		; 17 to 18 timer ticks, the first being partial:
++			; 0.93 to 0.99 s. The PIT loop below counts
++			; 36 * 65536 at 2386364 Hz, 0.99 s
 +	mov	bx,word [bios_ticks]	; BX = last timer tick count seen
 +.halt_loop:
 +	cli
@@ -42,7 +47,7 @@ index 86d4f2b..f8c96cc 100644
  	push	cx
  	push	dx
  	mov	bx,0		; DX:BX = countdown of pit ticks to wait
-@@ -123,3 +156,4 @@ fdc_wait_irq:
+@@ -123,3 +161,4 @@ fdc_wait_irq:
  	pop	dx
  	pop	cx
  	ret

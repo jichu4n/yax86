@@ -330,12 +330,21 @@ visibility, and how performance work is measured - are in the root
   `ARCH_EMU` build halts or skips the same waits.
   - **`fdc_wait_irq` waits with `HLT`**, as GLaBIOS's `FDC_HLT_WAIT` does. The
     IRQ flag is tested with interrupts off and `sti` is followed directly by
-    `hlt`, so the IRQ cannot slip in between. The timeout counts BIOS timer
-    ticks, since one PIT reading per wake-up sees the same count every 55ms:
-    18 ticks, the 0.99s upstream's loop really waits (36 x 65536 counts at
+    `hlt`, so the IRQ cannot slip in between. It returns with interrupts
+    enabled, where upstream keeps IF: the wait only succeeds once the IRQ 6
+    handler has run, so every caller that works has them on already. The
+    timeout counts BIOS timer ticks, since one PIT reading per wake-up sees
+    the same count every 55ms: 18 ticks, the first partial, so 0.93 to 0.99s
+    against the 0.99s upstream's loop really waits (36 x 65536 counts at
     2,386,364Hz, mode 3 counting by two), not the 2 seconds its comment says.
     A drive that never interrupts gives DOS's "Not ready" after the same
     emulated time as upstream.
+  - **The timeout needs the timer to tick**, where upstream reads the PIT
+    itself: a guest that masks IRQ 0, or hooks `INT 8` without chaining, and
+    then reaches a controller that never interrupts would wait for good.
+    GLaBIOS's own `HLT` wait has the same dependence, and such a guest has
+    stopped the BIOS clock too. The emulated controller always interrupts -
+    an empty drive answers in 0.20s - so it does not happen here.
   - **The head settle time after a seek is skipped**, as GLaBIOS's
     `ARCH_EMU` build skips `FDC_SEEK_SETTLE`: upstream waits 15ms after every
     seek, reads included (byte 9 of all its parameter tables is `0Fh`). The
