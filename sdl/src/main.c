@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -134,7 +135,7 @@ void MainTick(void) {
     elapsed_ns = kMaxCatchUpNs;
   }
   uint32_t remaining_ticks =
-      (uint32_t)(elapsed_ns * Y_PLATFORM_CPU_CYCLES_PER_SECOND /
+      (uint32_t)(elapsed_ns * YPlatformGetCPUCyclesPerSecond(&g_platform) /
                  kNanosecondsPerSecond);
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
@@ -173,6 +174,33 @@ void MainTick(void) {
   DisplayRender();                  // Update screen
 }
 
+static const struct {
+  const char* name;
+  uint32_t multiplier;
+} kSpeeds[] = {
+    {"1x", 1}, {"2x", 2}, {"4x", 4}, {"8x", 8}, {"16x", 16},
+};
+
+static bool MainParseSpeed(const char* value, uint32_t* cycles_per_pit_tick) {
+  for (size_t i = 0; i < sizeof(kSpeeds) / sizeof(kSpeeds[0]); ++i) {
+    if (strcasecmp(value, kSpeeds[i].name) == 0) {
+      *cycles_per_pit_tick =
+          kSpeeds[i].multiplier * Y_PLATFORM_CYCLES_PER_PIT_TICK;
+      return true;
+    }
+  }
+  return false;
+}
+
+static void MainPrintUsage(const char* program_name) {
+  fprintf(
+      stderr,
+      "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m (default: "
+      "360k)] [--speed 1x|2x|4x|8x|16x (default: 1x)] [--mda|--cga] [--hdd "
+      "[image]] [--no-hdd]\n",
+      program_name);
+}
+
 int main(int argc, char* argv[]) {
   // Logging comes first, so that anything after it can log. All modules are
   // enabled, but only errors are shown by default - raise min_level to
@@ -185,6 +213,7 @@ int main(int argc, char* argv[]) {
 
   const char* floppy_path = kDefaultFloppyImagePath;
   YFDCDriveType floppy_drive_type = Y_FDC_DRIVE_TYPE_360KB;
+  uint32_t cycles_per_pit_tick = Y_PLATFORM_CYCLES_PER_PIT_TICK;
   // The machine has a hard disk unless asked otherwise. Under Emscripten there
   // is no command line at all, so anything gated behind a flag would be
   // unreachable in the browser.
@@ -200,11 +229,14 @@ int main(int argc, char* argv[]) {
       const char* value = argv[++i];
       if (!FloppyParseDriveType(value, &floppy_drive_type)) {
         APP_ERROR("invalid_floppy_drive_type", Y_LOG_STRING("type", value));
-        fprintf(
-            stderr,
-            "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m "
-            "(default: 360k)] [--mda|--cga] [--hdd [image]] [--no-hdd]\n",
-            argv[0]);
+        MainPrintUsage(argv[0]);
+        return 1;
+      }
+    } else if (strcmp(argv[i], "--speed") == 0 && i + 1 < argc) {
+      const char* value = argv[++i];
+      if (!MainParseSpeed(value, &cycles_per_pit_tick)) {
+        APP_ERROR("invalid_speed", Y_LOG_STRING("speed", value));
+        MainPrintUsage(argv[0]);
         return 1;
       }
     } else if (strcmp(argv[i], "--hdd") == 0) {
@@ -217,11 +249,7 @@ int main(int argc, char* argv[]) {
       attach_hard_disk = false;
     } else if (argv[i][0] == '-') {
       APP_ERROR("unknown_option", Y_LOG_STRING("option", argv[i]));
-      fprintf(
-          stderr,
-          "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m "
-          "(default: 360k)] [--mda|--cga] [--hdd [image]] [--no-hdd]\n",
-          argv[0]);
+      MainPrintUsage(argv[0]);
       return 1;
     } else {
       floppy_path = argv[i];
@@ -266,6 +294,7 @@ int main(int argc, char* argv[]) {
     DisplayQuit();
     return 1;
   }
+  YPlatformSetCyclesPerPITTick(&g_platform, cycles_per_pit_tick);
   // An idle DOS prompt otherwise costs a full frame's worth of emulation to
   // produce nothing, because DOS waits for a keystroke by polling rather than
   // halting. This machine has a host to be a good citizen on - in the browser
@@ -273,7 +302,8 @@ int main(int argc, char* argv[]) {
   YPlatformSetDOSIdleSkip(&g_platform, true);
 
   APP_DEBUG(
-      "started", Y_LOG_UINT("memory_kb", config->direct_memory_size / 1024));
+      "started", Y_LOG_UINT("memory_kb", config->direct_memory_size / 1024),
+      Y_LOG_UINT("cycles_per_pit_tick", g_platform.cycles_per_pit_tick));
 
   // Mount the boot floppy. Without one the BIOS still runs, so a failure here
   // is reported but not fatal.

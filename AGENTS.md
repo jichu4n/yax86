@@ -23,7 +23,7 @@ been opened with Read, so do not count on it arriving by itself.
 | --- | --- | --- |
 | anything under `core/`, other than the CPU | `core/AGENTS.md` | how the modules fit together and are brought up, bundling and ROMs, the memory map, the CPU clock ratio, idle skipping, the hard disk controller, host text fonts, rendering from a copy, logging, and `Y_HOT` placement |
 | `core/src/cpu/` | `core/src/cpu/AGENTS.md` - and `core/AGENTS.md` | decoding, instruction fetch, the decode cache, the data window, prefixes, operand dispatch and values, cycle costs, string runs, the interrupt hint, runs of instructions, and what each measured |
-| `sdl/` | `sdl/AGENTS.md` | the SDL runtime: pacing to the wall clock, disks, video adapters, audio, logs |
+| `sdl/` | `sdl/AGENTS.md` | the SDL runtime: pacing to the wall clock, speed presets, disks, video adapters, audio, logs |
 | `pico/bench/` or `pico/common/`, or any measurement on hardware | `pico/bench/AGENTS.md` | the `dos-boot` workload and its invariant, building and running on a board, current figures, timing, overclocking, profiling |
 | `pico/picocalc/` | `pico/picocalc/AGENTS.md` - and `pico/bench/AGENTS.md` to measure | the PicoCalc's hardware, pacing, LCD, drawing, keyboard, SD card and disks, speaker, the commands over USB and `debug.js` |
 
