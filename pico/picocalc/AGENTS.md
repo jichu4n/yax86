@@ -629,7 +629,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **New VM is a form**: the name, typed in place while its row is chosen,
   Memory - `128K`, `256K`, `384K`, `512K` or `640K`, with `(paged)` on sizes
   above `kPicoGuestSRAMSize`, on `src/vm_memory_screen.c` - Video adapter -
-  `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - floppy disks 1 and 2,
+  `CGA` or `MDA`, on `src/vm_video_adapter_screen.c` - Speed - `4.77MHz` or
+  `Max`, on `src/vm_speed_screen.c` - floppy disks 1 and 2,
   hard disks 1 and 2, and Create. Each floppy drive's page
   (`src/vm_drive_config_screen.c`) has Drive type (`360KB`, `720KB`, `1.2MB` or
   `1.44MB`, on `src/vm_floppy_type_screen.c`), then the disk in the drive:
@@ -1012,7 +1013,9 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 - **It is a box drawn over the guest's screen**, white on blue in code page
   437's double lined box, a page at a time:
   - the main page: Floppy disk 1; Floppy disk 2, with a second floppy
-    drive; Status; Reset; and Power off, with a list of VMs to go back to.
+    drive; Speed (`4.77MHz` or `Max`, via `src/vm_speed_screen.c`, switching
+    the running VM's speed for the session without overwriting `vm.cfg`);
+    Status; Reset; and Power off, with a list of VMs to go back to.
     Esc closes the menu.
   - a drive's page: what is in the drive, and Swap disk image and Eject, or
     Choose disk image alone while it is empty;
