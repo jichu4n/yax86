@@ -166,9 +166,13 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   is driven by pacing lag in `PaceToRealTime()` (stepping down by 0.50 as soon
   as lag reaches 15ms and is not shrinking, well before `kMaxLagUs = 100ms`
   drops guest time), so slow stretches of any instruction mix - including
-  `REP MOVSW` scrolling and SD I/O - react before dropping time. Every change
-  is logged as `speed_ratio_changed`. Render cadence (60Hz), boot polling
-  (20Hz), boot timeout (30s) and `emulated_us` all follow
+  `REP MOVSW` scrolling and SD I/O - react before dropping time. On the Pico 2
+  `workloads/bench.txt` (0.38s dropped at 4.77MHz), 15ms with no cooldown
+  drops 0.62s with 0 drops above ratio 4; 25ms with no cooldown dropped 0.83s
+  (0 above 4) and adding a 50ms cooldown dropped 1.39s (7 above 4) for only
+  0.4% less wall time. Every change is logged as `speed_ratio_changed`. Render
+  cadence (60Hz), boot polling (20Hz), boot timeout (30s) and `emulated_us`
+  all follow
   `g_clock.guest_cycles`, while `cycles` and "vs a real PC/XT" stay in CPU
   cycles relative to 4.77MHz so figures compare across `4.77MHz` and `Max`.
 - Due times come from an anchor where the two clocks agreed, moved forward a
