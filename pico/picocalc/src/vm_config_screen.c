@@ -16,6 +16,7 @@
 #include "status_bar.h"
 #include "vm_drive_config_screen.h"
 #include "vm_memory_screen.h"
+#include "vm_speed_screen.h"
 #include "vm_video_adapter_screen.h"
 
 enum {
@@ -26,6 +27,7 @@ typedef enum FormItem {
   kFormName = 0,
   kFormMemory,
   kFormVideoAdapter,
+  kFormSpeed,
   // The drives' items, in the order of the VM's drives.
   kFormDriveA,
   kFormDriveB,
@@ -236,6 +238,9 @@ static ScreenResult OnSelect(void) {
   if (item == kFormVideoAdapter) {
     return VMVideoAdapterScreenOpen(&g_machine.video_adapter);
   }
+  if (item == kFormSpeed) {
+    return VMSpeedScreenOpen(&g_machine.speed);
+  }
   const uint8_t drive = (uint8_t)(item - kFormDriveA);
   return VMDriveConfigScreenOpen(drive, &g_drives[drive]);
 }
@@ -310,6 +315,10 @@ static void OnDraw(DisplayBox* box) {
       rows[kFormVideoAdapter], sizeof(rows[kFormVideoAdapter]), "%-15s %s",
       "Video adapter", VMConfigVideoAdapterLabel(g_machine.video_adapter));
   items[kFormVideoAdapter] = (BoxItem){rows[kFormVideoAdapter], true};
+  snprintf(
+      rows[kFormSpeed], sizeof(rows[kFormSpeed]), "%-15s %s", "Speed",
+      VMConfigSpeedLabel(g_machine.speed));
+  items[kFormSpeed] = (BoxItem){rows[kFormSpeed], true};
   items[kFormCreate] = (BoxItem){g_is_existing ? "Save" : "Create", false};
   ListBoxDrawItems(
       box, g_is_existing ? g_vm_manager->vms->vms[g_vm].name : "New VM", NULL,

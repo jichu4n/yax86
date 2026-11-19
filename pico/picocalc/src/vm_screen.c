@@ -132,8 +132,9 @@ static void OnDraw(DisplayBox* box) {
     char memory[kVMMemoryLabelLength + 1];
     VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
     snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "Memory: %-8s  Video: %s",
-        memory, VMConfigVideoAdapterLabel(g_machine.video_adapter));
+        lines[num_lines], sizeof(lines[num_lines]), "%s  %s  %s", memory,
+        VMConfigVideoAdapterLabel(g_machine.video_adapter),
+        VMConfigSpeedLabel(g_machine.speed));
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
     for (uint8_t first = 0; first < kNumVMDrives; first += 2) {
