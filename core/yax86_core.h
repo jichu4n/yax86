@@ -16920,6 +16920,10 @@ typedef struct YPlatformState {
   // as 4 at 4.77MHz), or 0 otherwise, so YPlatformSync() can shift instead of
   // dividing on targets without a divide instruction.
   uint8_t pit_tick_shift;
+  // Set by YPlatformRun() whenever DOS idle skipping advances the clock. Never
+  // cleared by the core; a host measuring execution throughput clears it before
+  // a batch and checks it afterwards to skip idle batches.
+  bool did_skip_idle;
 
   // Value of ticks when the devices were last brought up to date.
   uint32_t last_sync_ticks;
@@ -18519,6 +18523,7 @@ Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     return;
   }
   platform->ticks += cycles;
+  platform->did_skip_idle = true;
   YPlatformSync(platform);
 }
 

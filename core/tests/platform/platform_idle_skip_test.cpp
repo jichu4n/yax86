@@ -312,4 +312,22 @@ TEST(PlatformIdleSkipTest, LargeBudgetIsDeliveredInBoundedSteps) {
   EXPECT_GT(machine.LoopCount(), 5u);
 }
 
+TEST(PlatformIdleSkipTest, SetsDidSkipIdleWhenSkipping) {
+  IdleMachine machine;
+  ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/false));
+  EXPECT_FALSE(machine.platform.did_skip_idle);
+
+  machine.RunOneFrame();
+  EXPECT_FALSE(machine.platform.did_skip_idle);
+
+  YPlatformSetDOSIdleSkip(&machine.platform, true);
+  machine.RunOneFrame();
+  EXPECT_TRUE(machine.platform.did_skip_idle);
+
+  machine.platform.did_skip_idle = false;
+  YPlatformSetDOSIdleSkip(&machine.platform, false);
+  machine.RunOneFrame();
+  EXPECT_FALSE(machine.platform.did_skip_idle);
+}
+
 }  // namespace

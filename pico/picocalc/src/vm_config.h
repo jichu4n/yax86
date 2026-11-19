@@ -10,6 +10,7 @@
 //   hd2=/shared/tools.img
 //   video_adapter=mda
 //   memory_kb=640
+//   speed=4.77mhz
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
@@ -21,8 +22,9 @@
 // 720KB, 1.2MB or 1.44MB, checked against fd1_type and fd2_type (360k, 720k,
 // 1.2m or 1.44m, and 360k when not named), and hard disk images the core's
 // 10MB drive. video_adapter is cga or mda, and cga when not named. memory_kb
-// is a multiple of 16 from 64 to 640, and 640 when not named. Keys this
-// firmware does not know are skipped.
+// is a multiple of 16 from 64 to 640, and 640 when not named. speed is
+// 4.77mhz or max, and 4.77mhz when not named. Keys this firmware does not
+// know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
 
@@ -77,11 +79,20 @@ typedef struct VMEntry {
   char path[kFSMaxPath + 1];
 } VMEntry;
 
-// A VM's machine settings, outside its drives: video adapter and conventional
-// memory in KB.
+// Speed mode for a VM: 4.77MHz (a real PC/XT, the default) or Max (runs the
+// CPU as fast as the host allows while keeping guest time locked to real time).
+typedef enum VMSpeed {
+  kVMSpeed477MHz = 0,
+  kVMSpeedMax,
+  kNumVMSpeeds,
+} VMSpeed;
+
+// A VM's machine settings, outside its drives: video adapter, conventional
+// memory in KB, and speed mode.
 typedef struct VMMachine {
   YVideoAdapter video_adapter;
   uint16_t memory_kb;
+  VMSpeed speed;
 } VMMachine;
 
 typedef struct VMConfig {
@@ -98,6 +109,8 @@ typedef struct VMConfig {
   YVideoAdapter video_adapter;
   // The VM's conventional memory in KB: kVMDefaultMemoryKB when not named.
   uint16_t memory_kb;
+  // The VM's speed mode: kVMSpeed477MHz when not named.
+  VMSpeed speed;
 } VMConfig;
 
 // A floppy drive type's name in vm.cfg and the report (360k, 720k, 1.2m,
@@ -110,6 +123,11 @@ const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type);
 // in the menu and on the status page (CGA, MDA).
 const char* VMConfigVideoAdapterName(YVideoAdapter adapter);
 const char* VMConfigVideoAdapterLabel(YVideoAdapter adapter);
+
+// The speed mode's name in vm.cfg and the report (4.77mhz, max), and its label
+// in the menu and on the status page (4.77MHz, Max).
+const char* VMConfigSpeedName(VMSpeed speed);
+const char* VMConfigSpeedLabel(VMSpeed speed);
 
 // The entry of the VM named name, whether or not it is on the card. Returns
 // false if the name is too long for one.

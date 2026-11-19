@@ -50,9 +50,22 @@ enum {
   // PSRAM, and the frames it is paged through with it - see yax86_pico.h.
   kGuestRAMSize = kPicoGuestSRAMSize,
 
-  // Emulated cycles per pass of the run loop, about ten milliseconds of guest
-  // time - the same batch pico/bench runs.
+  // Emulated cycles per pass of the run loop at 4.77MHz, about ten
+  // milliseconds of guest time - the same batch pico/bench runs - and its
+  // length in PIT ticks so higher clock ratios keep the same batch cadence.
   kCyclesPerBatch = 48000,
+  kPITTicksPerBatch = kCyclesPerBatch / Y_PLATFORM_CYCLES_PER_PIT_TICK,
+
+  // Max-mode speed controller tuning. Each window measures host throughput
+  // over 250ms of non-idle execution; hysteresis prevents stepping back and
+  // forth between adjacent integer cycles-per-PIT-tick ratios.
+  kMaxSpeedWindowUs = 250 * 1000,
+  kMaxSpeedStepUpMargin = 15,
+  kMaxSpeedStepDownMargin = 5,
+  // Batches averaging more than this many CPU cycles per retired instruction
+  // are dominated by INT 28h idle skipping, HLT waits or bulk REP runs, so
+  // the controller holds its current ratio across them.
+  kMaxCyclesPerBusyInstruction = 64,
 
   // The 80x25 text screen, which the boot is watched through. Character and
   // attribute alternate, so the characters are the even bytes.
@@ -144,8 +157,10 @@ static const char* const kBootStageEvents[] = {
 // is sent.
 typedef struct RuntimeStatus {
   BootStage boot_stage;
-  // Emulated and host time at the point boot_stage was last changed.
+  // CPU cycles, guest time (in 4.77MHz-equivalent cycles) and host time at the
+  // point boot_stage was last changed.
   uint64_t boot_cycles;
+  uint64_t boot_guest_cycles;
   uint64_t boot_elapsed_us;
   // Host time spent running the VM up to then, which is the elapsed time
   // less the time spent waiting for real time to catch up. It is what the
@@ -176,20 +191,26 @@ static bool g_is_host_attached;
 // them is that much slower for.
 static uint64_t g_command_us;
 
-// How far the VM has got in emulated time, and what pacing it against
-// real time has cost.
+// How far the VM has got in CPU cycles and guest time, and what pacing it
+// against real time has cost.
 typedef struct RunClock {
-  // Emulated cycles since power on. The platform's own counter is 32 bits, so
-  // this is accumulated from per-batch deltas, which unsigned subtraction
-  // keeps right across a wrap.
+  // CPU cycles since power on. The platform's own counter is 32 bits, so this
+  // is accumulated from per-batch deltas, which unsigned subtraction keeps
+  // right across a wrap.
   uint64_t cycles;
+  // Guest emulated time since power on, in 4.77MHz-equivalent cycles
+  // (Y_PLATFORM_CYCLES_PER_PIT_TICK per PIT tick), with the fractional
+  // remainder (< cycles_per_pit_tick) kept in guest_cycles_rem so ratio
+  // changes introduce no rounding drift. Equal to cycles at 4.77MHz.
+  uint64_t guest_cycles;
+  uint32_t guest_cycles_rem;
   uint32_t last_ticks;
   // Host time at power on.
   uint64_t start_us;
-  // A point at which emulated and real time agreed. Emulated time from there
-  // on is due to take as long in real time.
+  // A point at which guest emulated time and real time agreed. Guest time from
+  // there on is due to take as long in real time.
   uint64_t anchor_us;
-  uint64_t anchor_cycles;
+  uint64_t anchor_guest_cycles;
   // Host time spent waiting for real time to catch up with the VM.
   uint64_t waited_us;
   // Real time the VM fell behind by and did not make up.
@@ -200,7 +221,16 @@ typedef struct RunClock {
   uint64_t pause_start_us;
 } RunClock;
 
+// State for Max speed mode's throughput controller.
+typedef struct SpeedController {
+  uint64_t window_cycles;
+  uint64_t window_busy_us;
+  uint64_t last_instructions;
+} SpeedController;
+
 static RunClock g_clock;
+static VMSpeed g_speed_mode;
+static SpeedController g_speed_controller;
 
 // Whether guest RAM is paged, how much guest RAM the VM has, and whether the VM
 // is up, before which there is no guest RAM to read.
@@ -283,7 +313,8 @@ static uint32_t BootSpeedPermille(void) {
 }
 
 static void FormatBootLine(char* buffer, size_t size) {
-  const uint64_t emulated_ms = g_status.boot_cycles * kMillisecondsPerSecond /
+  const uint64_t emulated_ms = g_status.boot_guest_cycles *
+                               kMillisecondsPerSecond /
                                Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   const uint64_t host_ms =
       g_status.boot_elapsed_us / kMicrosecondsPerMillisecond;
@@ -302,12 +333,29 @@ static void FormatBootLine(char* buffer, size_t size) {
 
 static void FormatSpeedLine(char* buffer, size_t size) {
   const uint32_t permille = BootSpeedPermille();
+  if (g_speed_mode == kVMSpeedMax) {
+    const uint32_t cpu_mhz_x100 =
+        (YPlatformGetCPUCyclesPerSecond(&g_platform) + 5000) / 10000;
+    if (permille == 0) {
+      snprintf(
+          buffer, size, "Max (%lu.%02luMHz), boot measured at date prompt",
+          (unsigned long)(cpu_mhz_x100 / 100),
+          (unsigned long)(cpu_mhz_x100 % 100));
+      return;
+    }
+    snprintf(
+        buffer, size, "Max (%lu.%02luMHz), boot %lu.%lu%% of a real PC/XT",
+        (unsigned long)(cpu_mhz_x100 / 100),
+        (unsigned long)(cpu_mhz_x100 % 100), (unsigned long)(permille / 10),
+        (unsigned long)(permille % 10));
+    return;
+  }
   if (permille == 0) {
-    snprintf(buffer, size, "measured once DOS asks for the date");
+    snprintf(buffer, size, "4.77MHz, boot measured once DOS asks for the date");
     return;
   }
   snprintf(
-      buffer, size, "%lu.%lu%% of a real PC/XT, so %s",
+      buffer, size, "4.77MHz, %lu.%lu%% of a real PC/XT, %s",
       (unsigned long)(permille / 10), (unsigned long)(permille % 10),
       permille >= 1000 ? "paced to real time" : "slower than real time");
 }
@@ -514,15 +562,15 @@ static void UpdateStatusRows(void) {
 
 // How far the boot has got, and what it took: the fields of a boot_stage
 // log, and of the boot's group of a report.
-#define BOOT_FIELDS()                                                   \
-  Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),         \
-      Y_LOG_UINT("instructions", g_status.num_instructions),            \
-      Y_LOG_UINT("cycles", g_status.boot_cycles),                       \
-      Y_LOG_UINT(                                                       \
-          "emulated_us", g_status.boot_cycles* kMicrosecondsPerSecond / \
-                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),         \
-      Y_LOG_UINT("real_us", g_status.boot_elapsed_us),                  \
-      Y_LOG_UINT("busy_us", g_status.boot_busy_us),                     \
+#define BOOT_FIELDS()                                                         \
+  Y_LOG_STRING("stage", kBootStageEvents[g_status.boot_stage]),               \
+      Y_LOG_UINT("instructions", g_status.num_instructions),                  \
+      Y_LOG_UINT("cycles", g_status.boot_cycles),                             \
+      Y_LOG_UINT(                                                             \
+          "emulated_us", g_status.boot_guest_cycles* kMicrosecondsPerSecond / \
+                             Y_PLATFORM_CPU_CYCLES_PER_SECOND),               \
+      Y_LOG_UINT("real_us", g_status.boot_elapsed_us),                        \
+      Y_LOG_UINT("busy_us", g_status.boot_busy_us),                           \
       Y_LOG_UINT("speed_pm", BootSpeedPermille())
 
 // A drive's group of a report.
@@ -578,7 +626,7 @@ static __noinline void ReportRunning(const DebugCommand* command) {
       Y_LOG_UINT("copy_us", display.copy_us));
 }
 
-// The VM's drives, the VM, the menu and the pacing.
+// The VM's drives, the VM and the menu.
 static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "fd1", FloppyGetImage(kFloppyDriveA));
   ReplyDiskImage(command, "fd2", FloppyGetImage(kFloppyDriveB));
@@ -586,14 +634,24 @@ static __noinline void ReportDrives(const DebugCommand* command) {
   ReplyDiskImage(command, "hd2", HardDiskGetImage(kHardDisk2));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "vm", Y_LOG_STRING("name", g_has_vm ? g_vm->entry.name : ""),
-      Y_LOG_UINT("vms", g_vms->num_vms));
+      Y_LOG_UINT("vms", g_vms->num_vms),
+      Y_LOG_STRING("speed", VMConfigSpeedName(g_speed_mode)));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "menu", Y_LOG_BOOL("open", ScreenIsOpen()),
       Y_LOG_STRING("page", ScreenIsOpen() ? ScreenPageName() : ""));
+}
+
+// The VM's speed mode and pacing.
+static __noinline void ReportPacing(const DebugCommand* command) {
+  DEBUG_COMMAND_REPLY_GROUP(
+      command, "speed", Y_LOG_STRING("mode", VMConfigSpeedName(g_speed_mode)),
+      Y_LOG_UINT("cycles_per_pit_tick", g_platform.cycles_per_pit_tick),
+      Y_LOG_UINT("cpu_hz", YPlatformGetCPUCyclesPerSecond(&g_platform)),
+      Y_LOG_UINT("cycles", g_clock.cycles));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
       Y_LOG_UINT(
-          "emulated_us", g_clock.cycles * kMicrosecondsPerSecond /
+          "emulated_us", g_clock.guest_cycles * kMicrosecondsPerSecond /
                              Y_PLATFORM_CPU_CYCLES_PER_SECOND),
       Y_LOG_UINT("guest_clock_ms", GuestClockMs()),
       Y_LOG_UINT("waited_us", g_clock.waited_us),
@@ -607,6 +665,7 @@ static void Report(const DebugCommand* command) {
   DebugCommandReportSystem(command);
   ReportRunning(command);
   ReportDrives(command);
+  ReportPacing(command);
   DebugCommandReplyOk(command);
 }
 
@@ -744,18 +803,77 @@ static BootStage AdvanceBoot(BootStage stage) {
 static void SetBootStage(BootStage stage) {
   g_status.boot_stage = stage;
   g_status.boot_cycles = g_clock.cycles;
+  g_status.boot_guest_cycles = g_clock.guest_cycles;
   g_status.boot_elapsed_us = ElapsedUs();
   g_status.boot_busy_us = BusyUs();
   g_status.num_instructions = YCPUNumInstructionsRetired(&g_platform.cpu);
   BOOT_INFO("boot_stage", BOOT_FIELDS());
 }
 
-// Run a batch of emulated cycles, and return how the VM stands after it.
+static void ResetMaxSpeedWindow(void) {
+  g_speed_controller.window_cycles = 0;
+  g_speed_controller.window_busy_us = 0;
+  g_speed_controller.last_instructions =
+      YCPUNumInstructionsRetired(&g_platform.cpu);
+}
+
+// Adjust cycles_per_pit_tick in Max mode from recent non-idle throughput so
+// the CPU runs close to flat out while guest time tracks real time.
+static void UpdateMaxSpeed(uint32_t batch_cycles, uint64_t batch_busy_us) {
+  const uint64_t instructions = YCPUNumInstructionsRetired(&g_platform.cpu);
+  const uint64_t batch_instructions =
+      instructions - g_speed_controller.last_instructions;
+  g_speed_controller.last_instructions = instructions;
+  // Ignore batches where DOS idle skipping ran, or batches dominated by HLT
+  // waits or bulk REP runs: their throughput does not reflect sustained CPU
+  // execution.
+  if (g_platform.did_skip_idle || batch_cycles == 0 || batch_busy_us == 0 ||
+      batch_instructions * kMaxCyclesPerBusyInstruction < batch_cycles) {
+    return;
+  }
+  g_speed_controller.window_cycles += batch_cycles;
+  g_speed_controller.window_busy_us += batch_busy_us;
+  if (g_speed_controller.window_busy_us < kMaxSpeedWindowUs) {
+    return;
+  }
+
+  // Sustainable cycles per PIT tick, in hundredths (400 = 4.77MHz).
+  const uint64_t measured_x100 =
+      g_speed_controller.window_cycles *
+      ((uint64_t)Y_PLATFORM_CYCLES_PER_PIT_TICK * 100) *
+      kMicrosecondsPerSecond /
+      (g_speed_controller.window_busy_us * Y_PLATFORM_CPU_CYCLES_PER_SECOND);
+  const uint32_t current = g_platform.cycles_per_pit_tick;
+  uint32_t target = current;
+  if (measured_x100 >= (uint64_t)(current + 1) * 100 + kMaxSpeedStepUpMargin) {
+    target = (uint32_t)((measured_x100 - kMaxSpeedStepUpMargin) / 100);
+  } else if (
+      current > Y_PLATFORM_CYCLES_PER_PIT_TICK &&
+      measured_x100 + kMaxSpeedStepDownMargin < (uint64_t)current * 100) {
+    target = (uint32_t)(measured_x100 / 100);
+  }
+  if (target < Y_PLATFORM_CYCLES_PER_PIT_TICK) {
+    target = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+  } else if (target > Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK) {
+    target = Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK;
+  }
+  if (target != current) {
+    YPlatformSetCyclesPerPITTick(&g_platform, target);
+  }
+  g_speed_controller.window_cycles = 0;
+  g_speed_controller.window_busy_us = 0;
+}
+
+// Run a batch of emulated cycles (sized to ~10ms of guest time at the current
+// clock ratio), and return how the VM stands after it.
 static YPlatformRunStatus RunBatch(void) {
   // An invalid opcode is not a stop: the 8088 has no invalid opcode
   // exception, so a real one would carry on.
   YPlatformRunStatus status = Y_PLATFORM_RUNNING;
-  for (uint32_t remaining = kCyclesPerBatch; remaining > 0;) {
+  g_platform.did_skip_idle = false;
+  const uint32_t ratio = g_platform.cycles_per_pit_tick;
+  const uint32_t batch_budget = kPITTicksPerBatch * ratio;
+  for (uint32_t remaining = batch_budget; remaining > 0;) {
     const uint32_t batch_start = g_platform.ticks;
     status = YPlatformRun(&g_platform, remaining);
     const uint32_t consumed = g_platform.ticks - batch_start;
@@ -764,13 +882,21 @@ static YPlatformRunStatus RunBatch(void) {
       break;
     }
   }
-  g_clock.cycles += (uint32_t)(g_platform.ticks - g_clock.last_ticks);
+  const uint32_t batch_cycles =
+      (uint32_t)(g_platform.ticks - g_clock.last_ticks);
+  g_clock.cycles += batch_cycles;
   g_clock.last_ticks = g_platform.ticks;
+  const uint64_t scaled =
+      (uint64_t)batch_cycles * Y_PLATFORM_CYCLES_PER_PIT_TICK +
+      g_clock.guest_cycles_rem;
+  g_clock.guest_cycles += scaled / ratio;
+  g_clock.guest_cycles_rem = (uint32_t)(scaled % ratio);
   return status;
 }
 
-// Wait until real time has caught up with the emulated time the VM has
-// reached, which is what keeps it from running faster than a real PC/XT.
+// Wait until real time has caught up with the guest time the VM has reached,
+// which is what keeps guest time locked to real time in both 4.77MHz and Max
+// modes.
 //
 // Only ever waits between batches, never changes them, so pacing cannot move
 // anything the guest sees: the same batches run whether or not there is time
@@ -779,13 +905,13 @@ static void PaceToRealTime(void) {
   // The anchor moves a whole emulated second at a time, which keeps the
   // product below from overflowing however long the VM runs, and loses
   // nothing to rounding.
-  while (g_clock.cycles - g_clock.anchor_cycles >=
+  while (g_clock.guest_cycles - g_clock.anchor_guest_cycles >=
          Y_PLATFORM_CPU_CYCLES_PER_SECOND) {
-    g_clock.anchor_cycles += Y_PLATFORM_CPU_CYCLES_PER_SECOND;
+    g_clock.anchor_guest_cycles += Y_PLATFORM_CPU_CYCLES_PER_SECOND;
     g_clock.anchor_us += kMicrosecondsPerSecond;
   }
   const uint64_t due_us =
-      g_clock.anchor_us + (g_clock.cycles - g_clock.anchor_cycles) *
+      g_clock.anchor_us + (g_clock.guest_cycles - g_clock.anchor_guest_cycles) *
                               kMicrosecondsPerSecond /
                               Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   const uint64_t now_us = time_us_64();
@@ -795,7 +921,13 @@ static void PaceToRealTime(void) {
   } else if (now_us - due_us > kMaxLagUs) {
     g_clock.dropped_us += now_us - due_us;
     g_clock.anchor_us = now_us;
-    g_clock.anchor_cycles = g_clock.cycles;
+    g_clock.anchor_guest_cycles = g_clock.guest_cycles;
+    if (g_speed_mode == kVMSpeedMax &&
+        g_platform.cycles_per_pit_tick > Y_PLATFORM_CYCLES_PER_PIT_TICK) {
+      YPlatformSetCyclesPerPITTick(
+          &g_platform, g_platform.cycles_per_pit_tick - 1);
+      ResetMaxSpeedWindow();
+    }
   }
 }
 
@@ -979,7 +1111,8 @@ static void ResumeFromMenu(void) {
   const uint64_t now_us = time_us_64();
   g_clock.paused_us += now_us - g_clock.pause_start_us;
   g_clock.anchor_us = now_us;
-  g_clock.anchor_cycles = g_clock.cycles;
+  g_clock.anchor_guest_cycles = g_clock.guest_cycles;
+  ResetMaxSpeedWindow();
   RedrawGuest();
 }
 
@@ -1120,14 +1253,22 @@ static void RunVM(bool is_vm_ready) {
   g_clock.last_ticks = g_platform.ticks;
   g_clock.start_us = time_us_64();
   g_clock.anchor_us = g_clock.start_us;
+  ResetMaxSpeedWindow();
 
   for (;;) {
     AnnounceToNewHost();
 
-    if (is_running && !ScreenIsOpen() && RunBatch() == Y_PLATFORM_HUNG) {
-      // The CPU halted with nothing to wake it.
-      SYSTEM_ERROR("vm_stopped");
-      is_running = false;
+    const uint64_t iter_start_us = time_us_64();
+    const uint64_t cmd_start_us = g_command_us;
+    uint32_t batch_cycles = 0;
+    if (is_running && !ScreenIsOpen()) {
+      const uint32_t ticks_before = g_platform.ticks;
+      if (RunBatch() == Y_PLATFORM_HUNG) {
+        // The CPU halted with nothing to wake it.
+        SYSTEM_ERROR("vm_stopped");
+        is_running = false;
+      }
+      batch_cycles = g_platform.ticks - ticks_before;
     }
 
     PollCommand(&g_command_us);
@@ -1149,10 +1290,10 @@ static void RunVM(bool is_vm_ready) {
     }
 
     if (DisplayPowerIsOn() && !ScreenIsOpen() &&
-        g_clock.cycles >= next_render_cycles) {
+        g_clock.guest_cycles >= next_render_cycles) {
       do {
         next_render_cycles += kCyclesPerRender;
-      } while (next_render_cycles <= g_clock.cycles);
+      } while (next_render_cycles <= g_clock.guest_cycles);
       if (YAX86_PICOCALC_DRAW_SCREEN) {
         DisplaySendFrame(&g_platform.video);
       }
@@ -1160,12 +1301,12 @@ static void RunVM(bool is_vm_ready) {
 
     if (!IsBootOver() && !ScreenIsOpen()) {
       BootStage stage = g_status.boot_stage;
-      if (!is_running || g_clock.cycles >= max_boot_cycles) {
+      if (!is_running || g_clock.guest_cycles >= max_boot_cycles) {
         stage = kBootStageFailed;
-      } else if (g_clock.cycles >= next_poll_cycles) {
+      } else if (g_clock.guest_cycles >= next_poll_cycles) {
         do {
           next_poll_cycles += kBootPollCycles;
-        } while (next_poll_cycles <= g_clock.cycles);
+        } while (next_poll_cycles <= g_clock.guest_cycles);
         stage = AdvanceBoot(stage);
       }
       if (stage != g_status.boot_stage) {
@@ -1201,6 +1342,13 @@ static void RunVM(bool is_vm_ready) {
     if (ScreenIsOpen()) {
       sleep_ms(kPausedPollMs);
     } else if (is_running) {
+      if (g_speed_mode == kVMSpeedMax && batch_cycles > 0) {
+        const uint64_t iter_elapsed_us = time_us_64() - iter_start_us;
+        const uint64_t iter_cmd_us = g_command_us - cmd_start_us;
+        const uint64_t iter_busy_us =
+            iter_elapsed_us > iter_cmd_us ? iter_elapsed_us - iter_cmd_us : 0;
+        UpdateMaxSpeed(batch_cycles, iter_busy_us);
+      }
       PaceToRealTime();
     } else {
       sleep_ms(kStoppedPollMs);
@@ -1288,6 +1436,7 @@ void EmulatorInit(
 void EmulatorRun(VMConfig* vm) {
   g_vm = vm;
   g_has_vm = vm != NULL;
+  g_speed_mode = g_has_vm ? vm->speed : kVMSpeed477MHz;
   g_session.config = vm;
   g_session.fdc = &g_platform.fdc;
   OpenDrives();
