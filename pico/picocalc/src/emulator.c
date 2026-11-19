@@ -73,9 +73,10 @@ enum {
   // before stepping up.
   kMaxSpeedWindowUs = 250 * 1000,
   // Pacing lag threshold at which PaceToRealTime() steps target_x100 down
-  // immediately (well before kMaxLagUs = 100ms drops guest time), and the
-  // step-down amount in hundredths of a ratio (0.50).
-  kMaxSpeedLagStepDownUs = 25 * 1000,
+  // immediately (well before kMaxLagUs = 100ms drops guest time, leaving most
+  // of the 100ms cushion intact for SD I/O stalls), and the step-down amount
+  // in hundredths of a ratio (0.50).
+  kMaxSpeedLagStepDownUs = 15 * 1000,
   kMaxSpeedLagStepDownX100 = 50,
   // Batches averaging more than this many active CPU cycles per retired
   // instruction are dominated by HLT waits or bulk REP runs, so
@@ -884,6 +885,20 @@ static void SetMaxSpeedTarget(
       Y_LOG_UINT("signal", signal_value));
 }
 
+static void StepMaxSpeedDown(const char* reason, uint64_t lag_us) {
+  if (g_speed_mode != kVMSpeedMax ||
+      g_speed_controller.target_x100 <= kMaxSpeedMinRatioX100) {
+    return;
+  }
+  const uint32_t reduced =
+      g_speed_controller.target_x100 >
+              kMaxSpeedMinRatioX100 + kMaxSpeedLagStepDownX100
+          ? g_speed_controller.target_x100 - kMaxSpeedLagStepDownX100
+          : kMaxSpeedMinRatioX100;
+  SetMaxSpeedTarget(reduced, reason, lag_us);
+  ResetMaxSpeedWindow();
+}
+
 // Step target_x100 up in Max mode when sustained non-idle throughput shows
 // headroom and the VM is not lagging real time. Stepping down is driven by
 // pacing lag in PaceToRealTime() so slow stretches of any instruction mix
@@ -1006,28 +1021,11 @@ static void PaceToRealTime(void) {
       g_clock.anchor_us = now_us;
       g_clock.anchor_guest_cycles = g_clock.guest_cycles;
       g_speed_controller.last_lag_us = 0;
-      if (g_speed_mode == kVMSpeedMax &&
-          g_speed_controller.target_x100 > kMaxSpeedMinRatioX100) {
-        const uint32_t reduced =
-            g_speed_controller.target_x100 >
-                    kMaxSpeedMinRatioX100 + kMaxSpeedLagStepDownX100
-                ? g_speed_controller.target_x100 - kMaxSpeedLagStepDownX100
-                : kMaxSpeedMinRatioX100;
-        SetMaxSpeedTarget(reduced, "drop", lag_us);
-        ResetMaxSpeedWindow();
-      }
+      StepMaxSpeedDown("drop", lag_us);
     } else {
-      if (g_speed_mode == kVMSpeedMax &&
-          g_speed_controller.target_x100 > kMaxSpeedMinRatioX100 &&
-          lag_us >= kMaxSpeedLagStepDownUs &&
+      if (lag_us >= kMaxSpeedLagStepDownUs &&
           lag_us >= g_speed_controller.last_lag_us) {
-        const uint32_t reduced =
-            g_speed_controller.target_x100 >
-                    kMaxSpeedMinRatioX100 + kMaxSpeedLagStepDownX100
-                ? g_speed_controller.target_x100 - kMaxSpeedLagStepDownX100
-                : kMaxSpeedMinRatioX100;
-        SetMaxSpeedTarget(reduced, "lag", lag_us);
-        ResetMaxSpeedWindow();
+        StepMaxSpeedDown("lag", lag_us);
       }
       g_speed_controller.last_lag_us = lag_us;
     }

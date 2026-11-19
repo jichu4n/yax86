@@ -164,7 +164,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   and excluding `HLT`/bulk-`REP` batches with >64 active cycles per retired
   instruction, leaving 0.20 headroom and only when not lagging). Stepping down
   is driven by pacing lag in `PaceToRealTime()` (stepping down by 0.50 as soon
-  as lag reaches 25ms and is not shrinking, well before `kMaxLagUs = 100ms`
+  as lag reaches 15ms and is not shrinking, well before `kMaxLagUs = 100ms`
   drops guest time), so slow stretches of any instruction mix - including
   `REP MOVSW` scrolling and SD I/O - react before dropping time. Every change
   is logged as `speed_ratio_changed`. Render cadence (60Hz), boot polling
