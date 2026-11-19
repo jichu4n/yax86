@@ -154,16 +154,23 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   so pacing cannot change what the guest sees.
 - **Max mode (`speed=max` in `vm.cfg`) adjusts `cycles_per_pit_tick` between
   batches** from power on, on both RP2040 and RP2350, so the CPU runs close to
-  flat out while guest time tracks real time. Every 250ms of non-idle host time
-  (`did_skip_idle` clear and at most 64 CPU cycles per retired instruction, so
-  idle-skipped, `HLT`-heavy and bulk `REP` batches hold the current ratio), the
-  controller computes the sustainable integer ratio and steps up with a 0.15
-  margin or down with a 0.05 margin (and steps down by 1 immediately if lag is
-  dropped while above 4), clamped to `[4, Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK]`.
-  Render cadence (60Hz), boot polling (20Hz), boot timeout (30s) and
-  `emulated_us` all follow `g_clock.guest_cycles`, while `cycles` and "vs a
-  real PC/XT" stay in CPU cycles relative to 4.77MHz so figures compare across
-  `4.77MHz` and `Max`.
+  flat out while guest time tracks real time. The controller keeps a fractional
+  target `target_x100` in quarter-ratio steps (hundredths, `400` = 4.77MHz,
+  step `25` = 0.25 ratio = 6.25% of 4.77MHz) clamped to
+  `[400, Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK * 100]`, and `RunBatch()` alternates
+  adjacent integer ratios (`floor` and `floor + 1`) via a Bresenham phase
+  accumulator so the average matches `target_x100`. Stepping up is driven by
+  250ms windows of active CPU throughput (subtracting `idle_skipped_cycles`
+  and excluding `HLT`/bulk-`REP` batches with >64 active cycles per retired
+  instruction, leaving 0.20 headroom and only when not lagging). Stepping down
+  is driven by pacing lag in `PaceToRealTime()` (stepping down by 0.50 as soon
+  as lag reaches 25ms and is not shrinking, well before `kMaxLagUs = 100ms`
+  drops guest time), so slow stretches of any instruction mix - including
+  `REP MOVSW` scrolling and SD I/O - react before dropping time. Every change
+  is logged as `speed_ratio_changed`. Render cadence (60Hz), boot polling
+  (20Hz), boot timeout (30s) and `emulated_us` all follow
+  `g_clock.guest_cycles`, while `cycles` and "vs a real PC/XT" stay in CPU
+  cycles relative to 4.77MHz so figures compare across `4.77MHz` and `Max`.
 - Due times come from an anchor where the two clocks agreed, moved forward a
   whole emulated second at a time, so nothing overflows or rounds away.
 - **A VM that falls behind catches up by at most 100ms**, like the SDL

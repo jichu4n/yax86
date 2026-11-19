@@ -576,10 +576,6 @@ typedef struct YPlatformState {
   // as 4 at 4.77MHz), or 0 otherwise, so YPlatformSync() can shift instead of
   // dividing on targets without a divide instruction.
   uint8_t pit_tick_shift;
-  // Set by YPlatformRun() whenever DOS idle skipping advances the clock. Never
-  // cleared by the core; a host measuring execution throughput clears it before
-  // a batch and checks it afterwards to skip idle batches.
-  bool did_skip_idle;
 
   // Value of ticks when the devices were last brought up to date.
   uint32_t last_sync_ticks;
@@ -587,6 +583,10 @@ typedef struct YPlatformState {
   // as a signed difference against ticks so that it stays correct when the
   // 32-bit cycle counter wraps.
   uint32_t next_event_ticks;
+  // Cumulative CPU cycles skipped by YPlatformSkipIdleTime(). Hosts measuring
+  // sustained CPU throughput can diff this across a batch (as with ticks) to
+  // exclude idle-skipped cycles without writing into core state.
+  uint32_t idle_skipped_cycles;
 
   // CPU clock cycles per 1.193MHz PIT tick, between
   // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz) and
@@ -2179,7 +2179,7 @@ Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     return;
   }
   platform->ticks += cycles;
-  platform->did_skip_idle = true;
+  platform->idle_skipped_cycles += cycles;
   YPlatformSync(platform);
 }
 

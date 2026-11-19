@@ -312,22 +312,29 @@ TEST(PlatformIdleSkipTest, LargeBudgetIsDeliveredInBoundedSteps) {
   EXPECT_GT(machine.LoopCount(), 5u);
 }
 
-TEST(PlatformIdleSkipTest, SetsDidSkipIdleWhenSkipping) {
+TEST(PlatformIdleSkipTest, TracksIdleSkippedCycles) {
   IdleMachine machine;
   ASSERT_TRUE(machine.Init(/*enable_idle_skip=*/false));
-  EXPECT_FALSE(machine.platform.did_skip_idle);
+  EXPECT_EQ(machine.platform.idle_skipped_cycles, 0u);
 
   machine.RunOneFrame();
-  EXPECT_FALSE(machine.platform.did_skip_idle);
+  EXPECT_EQ(machine.platform.idle_skipped_cycles, 0u);
 
   YPlatformSetDOSIdleSkip(&machine.platform, true);
+  const uint32_t ticks_before = machine.platform.ticks;
   machine.RunOneFrame();
-  EXPECT_TRUE(machine.platform.did_skip_idle);
+  const uint32_t elapsed = machine.platform.ticks - ticks_before;
+  const uint32_t first_skipped = machine.platform.idle_skipped_cycles;
+  EXPECT_GT(first_skipped, 0u);
+  EXPECT_LE(first_skipped, elapsed);
 
-  machine.platform.did_skip_idle = false;
+  machine.RunOneFrame();
+  EXPECT_GT(machine.platform.idle_skipped_cycles, first_skipped);
+
+  const uint32_t total_skipped = machine.platform.idle_skipped_cycles;
   YPlatformSetDOSIdleSkip(&machine.platform, false);
   machine.RunOneFrame();
-  EXPECT_FALSE(machine.platform.did_skip_idle);
+  EXPECT_EQ(machine.platform.idle_skipped_cycles, total_skipped);
 }
 
 }  // namespace

@@ -56,15 +56,30 @@ enum {
   kCyclesPerBatch = 48000,
   kPITTicksPerBatch = kCyclesPerBatch / Y_PLATFORM_CYCLES_PER_PIT_TICK,
 
-  // Max-mode speed controller tuning. Each window measures host throughput
-  // over 250ms of non-idle execution; hysteresis prevents stepping back and
-  // forth between adjacent integer cycles-per-PIT-tick ratios.
+  // Max-mode speed controller tuning. The target cycles-per-PIT-tick ratio is
+  // kept in hundredths (400 = 4.77MHz) in quarter-ratio steps (25 = 0.25 of a
+  // ratio, 6.25% of 4.77MHz), and RunBatch() alternates adjacent integer
+  // ratios so the average matches the target.
+  kMaxSpeedRatioScale = 100,
+  kMaxSpeedMinRatioX100 = Y_PLATFORM_CYCLES_PER_PIT_TICK * kMaxSpeedRatioScale,
+  kMaxSpeedMaxRatioX100 = Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK *
+      kMaxSpeedRatioScale,
+  // Quantization step for target_x100, in hundredths of a ratio (0.25).
+  kMaxSpeedStepX100 = 25,
+  // Headroom left below measured throughput when stepping up, in hundredths of
+  // a ratio (0.20, ~5% of 4.77MHz).
+  kMaxSpeedHeadroomX100 = 20,
+  // Busy-time window over which UpdateMaxSpeed() measures sustained throughput
+  // before stepping up.
   kMaxSpeedWindowUs = 250 * 1000,
-  kMaxSpeedStepUpMargin = 15,
-  kMaxSpeedStepDownMargin = 5,
-  // Batches averaging more than this many CPU cycles per retired instruction
-  // are dominated by INT 28h idle skipping, HLT waits or bulk REP runs, so
-  // the controller holds its current ratio across them.
+  // Pacing lag threshold at which PaceToRealTime() steps target_x100 down
+  // immediately (well before kMaxLagUs = 100ms drops guest time), and the
+  // step-down amount in hundredths of a ratio (0.50).
+  kMaxSpeedLagStepDownUs = 25 * 1000,
+  kMaxSpeedLagStepDownX100 = 50,
+  // Batches averaging more than this many active CPU cycles per retired
+  // instruction are dominated by HLT waits or bulk REP runs, so
+  // UpdateMaxSpeed() excludes them from stepping up.
   kMaxCyclesPerBusyInstruction = 64,
 
   // The 80x25 text screen, which the boot is watched through. Character and
@@ -221,11 +236,29 @@ typedef struct RunClock {
   uint64_t pause_start_us;
 } RunClock;
 
-// State for Max speed mode's throughput controller.
+// State for Max speed mode's adaptive controller.
 typedef struct SpeedController {
+  // Current target cycles per PIT tick, in hundredths (400 = 4.77MHz), always
+  // a multiple of kMaxSpeedStepX100 in [kMaxSpeedMinRatioX100,
+  // kMaxSpeedMaxRatioX100].
+  uint32_t target_x100;
+  // Bresenham phase accumulator in [0, kMaxSpeedRatioScale) used by RunBatch()
+  // to alternate between floor(target) and floor(target) + 1.
+  uint32_t phase;
+  // Active (non-idle-skipped) CPU cycles accumulated in the current throughput
+  // window.
   uint64_t window_cycles;
+  // Host busy microseconds accumulated in the current throughput window.
   uint64_t window_busy_us;
+  // Retired instruction count at the end of the last batch, for per-batch
+  // cycles-per-instruction filtering.
   uint64_t last_instructions;
+  // Cumulative idle_skipped_cycles at the end of the last batch, diffed to
+  // exclude DOS idle-skipped cycles from throughput measurements.
+  uint32_t last_idle_skipped_cycles;
+  // Pacing lag from the previous PaceToRealTime() call (0 when ahead of or on
+  // real time), used to detect growing lag and block step-ups while behind.
+  uint64_t last_lag_us;
 } SpeedController;
 
 static RunClock g_clock;
@@ -331,11 +364,21 @@ static void FormatBootLine(char* buffer, size_t size) {
       (unsigned long long)(host_ms % kMillisecondsPerSecond));
 }
 
+// Effective CPU clock in Hz: 4.77MHz in 4.77MHz mode, or the fractional
+// target in Max mode.
+static uint32_t EffectiveCPUCyclesPerSecond(void) {
+  if (g_speed_mode == kVMSpeedMax) {
+    return (uint32_t)((uint64_t)Y_PLATFORM_CPU_CYCLES_PER_SECOND *
+                      g_speed_controller.target_x100 / kMaxSpeedMinRatioX100);
+  }
+  return YPlatformGetCPUCyclesPerSecond(&g_platform);
+}
+
 static void FormatSpeedLine(char* buffer, size_t size) {
   const uint32_t permille = BootSpeedPermille();
   if (g_speed_mode == kVMSpeedMax) {
     const uint32_t cpu_mhz_x100 =
-        (YPlatformGetCPUCyclesPerSecond(&g_platform) + 5000) / 10000;
+        (EffectiveCPUCyclesPerSecond() + 5000) / 10000;
     if (permille == 0) {
       snprintf(
           buffer, size, "Max (%lu.%02luMHz), boot measured at date prompt",
@@ -643,10 +686,14 @@ static __noinline void ReportDrives(const DebugCommand* command) {
 
 // The VM's speed mode and pacing.
 static __noinline void ReportPacing(const DebugCommand* command) {
+  const uint32_t target_x100 = g_speed_mode == kVMSpeedMax
+                                   ? g_speed_controller.target_x100
+                                   : kMaxSpeedMinRatioX100;
   DEBUG_COMMAND_REPLY_GROUP(
       command, "speed", Y_LOG_STRING("mode", VMConfigSpeedName(g_speed_mode)),
       Y_LOG_UINT("cycles_per_pit_tick", g_platform.cycles_per_pit_tick),
-      Y_LOG_UINT("cpu_hz", YPlatformGetCPUCyclesPerSecond(&g_platform)),
+      Y_LOG_UINT("target_x100", target_x100),
+      Y_LOG_UINT("cpu_hz", EffectiveCPUCyclesPerSecond()),
       Y_LOG_UINT("cycles", g_clock.cycles));
   DEBUG_COMMAND_REPLY_GROUP(
       command, "pacing", Y_LOG_UINT("real_us", ElapsedUs()),
@@ -815,23 +862,50 @@ static void ResetMaxSpeedWindow(void) {
   g_speed_controller.window_busy_us = 0;
   g_speed_controller.last_instructions =
       YCPUNumInstructionsRetired(&g_platform.cpu);
+  g_speed_controller.last_idle_skipped_cycles = g_platform.idle_skipped_cycles;
 }
 
-// Adjust cycles_per_pit_tick in Max mode from recent non-idle throughput so
-// the CPU runs close to flat out while guest time tracks real time.
+static void SetMaxSpeedTarget(
+    uint32_t new_target_x100, const char* reason, uint64_t signal_value) {
+  if (new_target_x100 < kMaxSpeedMinRatioX100) {
+    new_target_x100 = kMaxSpeedMinRatioX100;
+  } else if (new_target_x100 > kMaxSpeedMaxRatioX100) {
+    new_target_x100 = kMaxSpeedMaxRatioX100;
+  }
+  const uint32_t old_target_x100 = g_speed_controller.target_x100;
+  if (new_target_x100 == old_target_x100) {
+    return;
+  }
+  g_speed_controller.target_x100 = new_target_x100;
+  g_speed_controller.phase = 0;
+  SYSTEM_INFO(
+      "speed_ratio_changed", Y_LOG_UINT("old_x100", old_target_x100),
+      Y_LOG_UINT("new_x100", new_target_x100), Y_LOG_STRING("reason", reason),
+      Y_LOG_UINT("signal", signal_value));
+}
+
+// Step target_x100 up in Max mode when sustained non-idle throughput shows
+// headroom and the VM is not lagging real time. Stepping down is driven by
+// pacing lag in PaceToRealTime() so slow stretches of any instruction mix
+// (including REP MOVSW scrolling and SD I/O) react before lag is dropped.
 static void UpdateMaxSpeed(uint32_t batch_cycles, uint64_t batch_busy_us) {
   const uint64_t instructions = YCPUNumInstructionsRetired(&g_platform.cpu);
   const uint64_t batch_instructions =
       instructions - g_speed_controller.last_instructions;
   g_speed_controller.last_instructions = instructions;
-  // Ignore batches where DOS idle skipping ran, or batches dominated by HLT
-  // waits or bulk REP runs: their throughput does not reflect sustained CPU
-  // execution.
-  if (g_platform.did_skip_idle || batch_cycles == 0 || batch_busy_us == 0 ||
-      batch_instructions * kMaxCyclesPerBusyInstruction < batch_cycles) {
+  const uint32_t skipped_cycles = g_platform.idle_skipped_cycles -
+                                  g_speed_controller.last_idle_skipped_cycles;
+  g_speed_controller.last_idle_skipped_cycles = g_platform.idle_skipped_cycles;
+
+  const uint32_t active_cycles =
+      batch_cycles > skipped_cycles ? batch_cycles - skipped_cycles : 0;
+  // Ignore batches with no active cycles, or batches dominated by HLT waits or
+  // bulk REP runs whose throughput does not reflect sustained CPU execution.
+  if (active_cycles == 0 || batch_busy_us == 0 ||
+      batch_instructions * kMaxCyclesPerBusyInstruction < active_cycles) {
     return;
   }
-  g_speed_controller.window_cycles += batch_cycles;
+  g_speed_controller.window_cycles += active_cycles;
   g_speed_controller.window_busy_us += batch_busy_us;
   if (g_speed_controller.window_busy_us < kMaxSpeedWindowUs) {
     return;
@@ -839,26 +913,20 @@ static void UpdateMaxSpeed(uint32_t batch_cycles, uint64_t batch_busy_us) {
 
   // Sustainable cycles per PIT tick, in hundredths (400 = 4.77MHz).
   const uint64_t measured_x100 =
-      g_speed_controller.window_cycles *
-      ((uint64_t)Y_PLATFORM_CYCLES_PER_PIT_TICK * 100) *
+      g_speed_controller.window_cycles * kMaxSpeedMinRatioX100 *
       kMicrosecondsPerSecond /
       (g_speed_controller.window_busy_us * Y_PLATFORM_CPU_CYCLES_PER_SECOND);
-  const uint32_t current = g_platform.cycles_per_pit_tick;
-  uint32_t target = current;
-  if (measured_x100 >= (uint64_t)(current + 1) * 100 + kMaxSpeedStepUpMargin) {
-    target = (uint32_t)((measured_x100 - kMaxSpeedStepUpMargin) / 100);
-  } else if (
-      current > Y_PLATFORM_CYCLES_PER_PIT_TICK &&
-      measured_x100 + kMaxSpeedStepDownMargin < (uint64_t)current * 100) {
-    target = (uint32_t)(measured_x100 / 100);
-  }
-  if (target < Y_PLATFORM_CYCLES_PER_PIT_TICK) {
-    target = Y_PLATFORM_CYCLES_PER_PIT_TICK;
-  } else if (target > Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK) {
-    target = Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK;
-  }
-  if (target != current) {
-    YPlatformSetCyclesPerPITTick(&g_platform, target);
+  const uint32_t current = g_speed_controller.target_x100;
+  if (g_speed_controller.last_lag_us == 0 &&
+      measured_x100 >=
+          (uint64_t)current + kMaxSpeedStepX100 + kMaxSpeedHeadroomX100) {
+    const uint64_t quantized =
+        ((measured_x100 - kMaxSpeedHeadroomX100) / kMaxSpeedStepX100) *
+        kMaxSpeedStepX100;
+    const uint32_t target = quantized > kMaxSpeedMaxRatioX100
+                                ? kMaxSpeedMaxRatioX100
+                                : (uint32_t)quantized;
+    SetMaxSpeedTarget(target, "throughput", measured_x100);
   }
   g_speed_controller.window_cycles = 0;
   g_speed_controller.window_busy_us = 0;
@@ -870,7 +938,19 @@ static YPlatformRunStatus RunBatch(void) {
   // An invalid opcode is not a stop: the 8088 has no invalid opcode
   // exception, so a real one would carry on.
   YPlatformRunStatus status = Y_PLATFORM_RUNNING;
-  g_platform.did_skip_idle = false;
+  if (g_speed_mode == kVMSpeedMax) {
+    const uint32_t base = g_speed_controller.target_x100 / kMaxSpeedRatioScale;
+    const uint32_t frac = g_speed_controller.target_x100 % kMaxSpeedRatioScale;
+    uint32_t desired_ratio = base;
+    g_speed_controller.phase += frac;
+    if (g_speed_controller.phase >= kMaxSpeedRatioScale) {
+      g_speed_controller.phase -= kMaxSpeedRatioScale;
+      ++desired_ratio;
+    }
+    if (desired_ratio != g_platform.cycles_per_pit_tick) {
+      YPlatformSetCyclesPerPITTick(&g_platform, desired_ratio);
+    }
+  }
   const uint32_t ratio = g_platform.cycles_per_pit_tick;
   const uint32_t batch_budget = kPITTicksPerBatch * ratio;
   for (uint32_t remaining = batch_budget; remaining > 0;) {
@@ -916,17 +996,40 @@ static void PaceToRealTime(void) {
                               Y_PLATFORM_CPU_CYCLES_PER_SECOND;
   const uint64_t now_us = time_us_64();
   if (now_us < due_us) {
+    g_speed_controller.last_lag_us = 0;
     sleep_until(from_us_since_boot(due_us));
     g_clock.waited_us += time_us_64() - now_us;
-  } else if (now_us - due_us > kMaxLagUs) {
-    g_clock.dropped_us += now_us - due_us;
-    g_clock.anchor_us = now_us;
-    g_clock.anchor_guest_cycles = g_clock.guest_cycles;
-    if (g_speed_mode == kVMSpeedMax &&
-        g_platform.cycles_per_pit_tick > Y_PLATFORM_CYCLES_PER_PIT_TICK) {
-      YPlatformSetCyclesPerPITTick(
-          &g_platform, g_platform.cycles_per_pit_tick - 1);
-      ResetMaxSpeedWindow();
+  } else {
+    const uint64_t lag_us = now_us - due_us;
+    if (lag_us > kMaxLagUs) {
+      g_clock.dropped_us += lag_us;
+      g_clock.anchor_us = now_us;
+      g_clock.anchor_guest_cycles = g_clock.guest_cycles;
+      g_speed_controller.last_lag_us = 0;
+      if (g_speed_mode == kVMSpeedMax &&
+          g_speed_controller.target_x100 > kMaxSpeedMinRatioX100) {
+        const uint32_t reduced =
+            g_speed_controller.target_x100 >
+                    kMaxSpeedMinRatioX100 + kMaxSpeedLagStepDownX100
+                ? g_speed_controller.target_x100 - kMaxSpeedLagStepDownX100
+                : kMaxSpeedMinRatioX100;
+        SetMaxSpeedTarget(reduced, "drop", lag_us);
+        ResetMaxSpeedWindow();
+      }
+    } else {
+      if (g_speed_mode == kVMSpeedMax &&
+          g_speed_controller.target_x100 > kMaxSpeedMinRatioX100 &&
+          lag_us >= kMaxSpeedLagStepDownUs &&
+          lag_us >= g_speed_controller.last_lag_us) {
+        const uint32_t reduced =
+            g_speed_controller.target_x100 >
+                    kMaxSpeedMinRatioX100 + kMaxSpeedLagStepDownX100
+                ? g_speed_controller.target_x100 - kMaxSpeedLagStepDownX100
+                : kMaxSpeedMinRatioX100;
+        SetMaxSpeedTarget(reduced, "lag", lag_us);
+        ResetMaxSpeedWindow();
+      }
+      g_speed_controller.last_lag_us = lag_us;
     }
   }
 }
@@ -1112,6 +1215,7 @@ static void ResumeFromMenu(void) {
   g_clock.paused_us += now_us - g_clock.pause_start_us;
   g_clock.anchor_us = now_us;
   g_clock.anchor_guest_cycles = g_clock.guest_cycles;
+  g_speed_controller.last_lag_us = 0;
   ResetMaxSpeedWindow();
   RedrawGuest();
 }
@@ -1253,6 +1357,9 @@ static void RunVM(bool is_vm_ready) {
   g_clock.last_ticks = g_platform.ticks;
   g_clock.start_us = time_us_64();
   g_clock.anchor_us = g_clock.start_us;
+  g_speed_controller.target_x100 = kMaxSpeedMinRatioX100;
+  g_speed_controller.phase = 0;
+  g_speed_controller.last_lag_us = 0;
   ResetMaxSpeedWindow();
 
   for (;;) {

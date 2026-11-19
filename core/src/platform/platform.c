@@ -1454,7 +1454,7 @@ Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     return;
   }
   platform->ticks += cycles;
-  platform->did_skip_idle = true;
+  platform->idle_skipped_cycles += cycles;
   YPlatformSync(platform);
 }
 
