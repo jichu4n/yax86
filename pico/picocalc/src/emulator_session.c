@@ -25,6 +25,21 @@ bool EmulatorSessionCanPowerOff(const EmulatorSession* session) {
   return session->config != NULL;
 }
 
+VMSpeed EmulatorSessionSpeed(const EmulatorSession* session) {
+  return session->speed != NULL ? *session->speed : kVMSpeed477MHz;
+}
+
+void EmulatorSessionSetSpeed(EmulatorSession* session, VMSpeed speed) {
+  if (session->set_speed != NULL) {
+    session->set_speed(speed);
+  }
+  char message[kTextColumns + 1];
+  snprintf(
+      message, sizeof(message), "Speed set to %s", VMConfigSpeedLabel(speed));
+  EmulatorStatusBarPostMessage(message);
+  SYSTEM_INFO("speed_changed", Y_LOG_STRING("speed", VMConfigSpeedName(speed)));
+}
+
 // Save what a floppy drive now holds to the VM's vm.cfg, so that the next
 // start has it. Without a VM there is nothing to save to.
 static void SaveFloppy(EmulatorSession* session, FloppyDrive drive) {

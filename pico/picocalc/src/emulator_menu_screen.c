@@ -2,17 +2,20 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include "box.h"
 #include "display.h"
 #include "floppy_drive_screen.h"
 #include "list_box.h"
 #include "question_screen.h"
+#include "vm_speed_screen.h"
 
 typedef enum MainItem {
   // The drives' items, in the order of FloppyDrive.
   kMainDriveA = 0,
   kMainDriveB,
+  kMainSpeed,
   kMainStatus,
   kMainReset,
   // Shown only while there is a list of VMs to go back to.
@@ -23,6 +26,7 @@ typedef enum MainItem {
 static const BoxItem kMainItems[kNumMainItems] = {
     [kMainDriveA] = {"Floppy disk 1", true},
     [kMainDriveB] = {"Floppy disk 2", true},
+    [kMainSpeed] = {"Speed", true},
     [kMainStatus] = {"Status", true},
     [kMainReset] = {"Reset", false},
     [kMainPowerOff] = {"Power off", false},
@@ -51,9 +55,11 @@ static const StatusScreenLine* g_status_lines;
 static EmulatorMenuExit* g_exit;
 // The list box: the item selected, and whether it is out of date.
 static ListBox g_list_box;
-// The answers of the Reset and Power off questions, which they write.
+// The answers of the Reset, Power off and Speed screens, which they write.
 static bool g_is_reset_confirmed;
 static bool g_is_power_off_confirmed;
+static VMSpeed g_speed_choice;
+static bool g_is_choosing_speed;
 
 ScreenResult EmulatorMenuScreenOpen(
     EmulatorSession* session,
@@ -65,6 +71,8 @@ ScreenResult EmulatorMenuScreenOpen(
   *g_exit = kEmulatorMenuExitResume;
   g_is_reset_confirmed = false;
   g_is_power_off_confirmed = false;
+  g_is_choosing_speed = false;
+  g_speed_choice = EmulatorSessionSpeed(session);
   g_list_box.selected = 0;
   return ScreenOpen(&kEmulatorMenuScreen);
 }
@@ -105,6 +113,10 @@ static ScreenResult OnSelect(void) {
     case kMainDriveB:
       return FloppyDriveScreenOpen(
           g_session, (FloppyDrive)(item - kMainDriveA));
+    case kMainSpeed:
+      g_speed_choice = EmulatorSessionSpeed(g_session);
+      g_is_choosing_speed = true;
+      return VMSpeedScreenOpen(&g_speed_choice);
     case kMainStatus:
       return StatusScreenOpen(g_status_lines);
     case kMainReset:
@@ -132,6 +144,14 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 // Reset or Power off answered yes closes the menu, for the emulator to carry
 // it out.
 static ScreenResult OnResume(void) {
+  if (g_is_choosing_speed) {
+    g_is_choosing_speed = false;
+    if (g_speed_choice != EmulatorSessionSpeed(g_session)) {
+      EmulatorSessionSetSpeed(g_session, g_speed_choice);
+      return ScreenClose();
+    }
+    return ScreenStays();
+  }
   if (g_is_reset_confirmed) {
     *g_exit = kEmulatorMenuExitReset;
     return ScreenClose();
@@ -146,9 +166,14 @@ static ScreenResult OnResume(void) {
 static void OnDraw(DisplayBox* box) {
   MainItem shown[kNumMainItems];
   const uint8_t num_shown = ShownItems(shown);
+  char speed_row[kListBoxNarrowColumns];
+  snprintf(
+      speed_row, sizeof(speed_row), "Speed: %s",
+      VMConfigSpeedLabel(EmulatorSessionSpeed(g_session)));
   BoxItem items[kNumMainItems];
   for (uint8_t i = 0; i < num_shown; ++i) {
-    items[i] = kMainItems[shown[i]];
+    items[i] = shown[i] == kMainSpeed ? (BoxItem){speed_row, true}
+                                      : kMainItems[shown[i]];
   }
   ListBoxDrawItems(
       box, "yax86", NULL, 0, items, num_shown, g_list_box.selected, false);

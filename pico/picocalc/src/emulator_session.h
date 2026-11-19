@@ -26,7 +26,18 @@ typedef struct EmulatorSession {
   // The machine's floppy disk controller, which is told of a disk inserted
   // or ejected.
   YFDCState* fdc;
+  // The running VM's speed mode, and the callback emulator.c supplies to apply
+  // a change made from the in-VM menu.
+  const VMSpeed* speed;
+  void (*set_speed)(VMSpeed speed);
 } EmulatorSession;
+
+// The running VM's current speed mode.
+VMSpeed EmulatorSessionSpeed(const EmulatorSession* session);
+
+// Switch the running VM's speed mode for the current session (without
+// overwriting vm.cfg's default) and announce it on the status rows.
+void EmulatorSessionSetSpeed(EmulatorSession* session, VMSpeed speed);
 
 // The floppy drives the machine has: two, or one for a VM whose vm.cfg does
 // not name floppy disk 2. With one, the BIOS's switches report one, and
