@@ -12,10 +12,13 @@ An SDL3 runtime for the emulator, built natively and through Emscripten as
   to lock to, faster - 120-200Hz on an i7-3667U, which with a fixed budget
   ran the 8088 and its clock at twice speed. A gap over `MAX_CATCH_UP_NS` is
   dropped, so a tab returning from the background does not burst.
-- **`--speed 1x|2x|4x|8x|16x` sets the CPU clock to a power-of-two multiple of
-  4.77MHz**, default `1x`, with guest time still locked to wall time (and
-  keeping `YPlatformSync()` on its power-of-two shift path). The browser build
-  has no command line and stays at `1x`.
+- **`--speed 1x|2x|4x|8x|16x|max` sets the CPU clock**, default `1x`, with
+  guest time still locked to wall time: fixed presets pick a power-of-two
+  multiple of 4.77MHz (keeping `YPlatformSync()` on its power-of-two shift
+  path), and `max` adapts `cycles_per_pit_tick` from recent non-idle throughput
+  (subtracting `idle_skipped_cycles` and ignoring `HLT`/bulk-`REP` batches),
+  capped at `Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK` (64x 4.77MHz, ~305.5MHz). The
+  browser build has no command line and stays at `1x`.
 - **The loop steps no more often than `MIN_STEP_NS`**, a little under 1/60s.
   The display refreshes at 60Hz, so more steps draw nothing new, and with
   idle skipping a pass costs about one trip round the guest's idle loop, so
