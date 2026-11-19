@@ -74,6 +74,7 @@ T YPlatformReadPortByte
 T YPlatformRegisterMemoryMapEntry
 T YPlatformRegisterPortMapEntry
 T YPlatformRun
+T YPlatformSetCyclesPerPITTick
 T YPlatformSetDOSIdleSkip
 T YPlatformSync
 T YPlatformTick
