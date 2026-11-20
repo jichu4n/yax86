@@ -583,6 +583,10 @@ typedef struct YPlatformState {
   // as a signed difference against ticks so that it stays correct when the
   // 32-bit cycle counter wraps.
   uint32_t next_event_ticks;
+  // Cumulative CPU cycles skipped by YPlatformSkipIdleTime(). Hosts measuring
+  // sustained CPU throughput can diff this across a batch (as with ticks) to
+  // exclude idle-skipped cycles without writing into core state.
+  uint32_t idle_skipped_cycles;
 
   // CPU clock cycles per 1.193MHz PIT tick, between
   // Y_PLATFORM_CYCLES_PER_PIT_TICK (4, for 4.77MHz) and
@@ -2175,6 +2179,7 @@ Y_FILE_PRIVATE void YPlatformSkipIdleTime(
     return;
   }
   platform->ticks += cycles;
+  platform->idle_skipped_cycles += cycles;
   YPlatformSync(platform);
 }
 

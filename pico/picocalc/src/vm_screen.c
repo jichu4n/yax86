@@ -67,6 +67,7 @@ ScreenResult VMScreenOpen(VMManager* vm_manager, uint8_t index) {
   g_machine = (VMMachine){
       .video_adapter = config.video_adapter,
       .memory_kb = config.memory_kb,
+      .speed = config.speed,
   };
   g_list_box.selected = kVMConfigure;
   return ScreenOpen(&kVMScreen);

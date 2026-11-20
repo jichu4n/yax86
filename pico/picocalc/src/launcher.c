@@ -163,7 +163,8 @@ static __noinline bool LoadSelectedVM(uint8_t index, VMConfig* config) {
         "vm_loaded", Y_LOG_STRING("path", vm->path),
         Y_LOG_STRING(
             "video_adapter", VMConfigVideoAdapterName(config->video_adapter)),
-        Y_LOG_UINT("memory_kb", config->memory_kb));
+        Y_LOG_UINT("memory_kb", config->memory_kb),
+        Y_LOG_STRING("speed", VMConfigSpeedName(config->speed)));
     SaveBootDefault(vm->name);
     return true;
   }
