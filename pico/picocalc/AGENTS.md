@@ -410,7 +410,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   hd1=hd1.img
   video_adapter=cga
   memory_kb=640
-  speed=4.77mhz
+  speed=1x
   ```
 
   `fd1` and `fd2` are 360KB, 720KB, 1.2MB or 1.44MB floppies, their format
@@ -420,11 +420,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   drive"` until `Drive type` is set to `720KB`), `hd1` and `hd2` the hard disk
   controller's master and slave, each the core's 10MB drive, `video_adapter` is
   `cga` or `mda`, `cga` without it, `memory_kb` is a multiple of 16 from 64
-  to 640, 640 without it, and `speed` is `4.77mhz` or `max`, `4.77mhz` without
-  it. 16KB is the granularity GLaBIOS probes conventional
-  memory at; MS-DOS 3.30 stops with `Configuration too large for memory` at
-  64KB, so 128KB is the smallest size it boots in. Without a VM, the built-in
-  360KB floppy runs with the CGA, 640KB and `4.77mhz`. A key `vm.cfg` has that this
+  to 640, 640 without it, and `speed` is `1x` or `max`, `1x` without it. 16KB
+  is the granularity GLaBIOS probes conventional memory at; MS-DOS 3.30 stops
+  with `Configuration too large for memory` at 64KB, so 128KB is the smallest
+  size it boots in. Without a VM, the built-in 360KB floppy runs with the CGA,
+  640KB and `1x`. A key `vm.cfg` has that this
   firmware does not know is logged as `vm_config_key_ignored` on each read,
   with the file's path and the key, and skipped, so a file written by a later
   firmware still reads and a Configure save keeps the line; a bad value or path

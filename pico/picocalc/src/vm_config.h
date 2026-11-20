@@ -10,7 +10,7 @@
 //   hd2=/shared/tools.img
 //   video_adapter=mda
 //   memory_kb=640
-//   speed=4.77mhz
+//   speed=1x
 //
 // Each line is logfmt - any number of key=value pairs - and a line starting
 // with # is a comment. A path is relative to the folder the file is in, or
@@ -23,7 +23,7 @@
 // 1.2m or 1.44m, and 360k when not named), and hard disk images the core's
 // 10MB drive. video_adapter is cga or mda, and cga when not named. memory_kb
 // is a multiple of 16 from 64 to 640, and 640 when not named. speed is
-// 4.77mhz or max, and 4.77mhz when not named. Keys this firmware does not
+// 1x or max, and 1x when not named. Keys this firmware does not
 // know are skipped.
 #ifndef YAX86_PICOCALC_VM_CONFIG_H
 #define YAX86_PICOCALC_VM_CONFIG_H
@@ -124,7 +124,7 @@ const char* VMConfigFloppyDriveTypeLabel(YFDCDriveType type);
 const char* VMConfigVideoAdapterName(YVideoAdapter adapter);
 const char* VMConfigVideoAdapterLabel(YVideoAdapter adapter);
 
-// The speed mode's name in vm.cfg and the report (4.77mhz, max), and its label
+// The speed mode's name in vm.cfg and the report (1x, max), and its label
 // in the menu and on the status page (4.77MHz, Max).
 const char* VMConfigSpeedName(VMSpeed speed);
 const char* VMConfigSpeedLabel(VMSpeed speed);

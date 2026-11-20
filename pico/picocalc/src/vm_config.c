@@ -64,7 +64,7 @@ static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
 };
 
 static const char* const kSpeedNames[kNumVMSpeeds] = {
-    [kVMSpeed477MHz] = "4.77mhz",
+    [kVMSpeed477MHz] = "1x",
     [kVMSpeedMax] = "max",
 };
 
@@ -199,7 +199,7 @@ static bool TakeVMPair(
   }
   if (strcmp(key, kSpeedKey) == 0) {
     if (!SpeedFromName(value, &config->speed)) {
-      snprintf(problem, kVMProblemLength + 1, "speed is not 4.77mhz or max");
+      snprintf(problem, kVMProblemLength + 1, "speed is not 1x or max");
       return false;
     }
     return true;
