@@ -170,9 +170,11 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `workloads/bench.txt` (0.38s dropped at 4.77MHz), 15ms with no cooldown
   drops 0.62s with 0 drops above ratio 4; 25ms with no cooldown dropped 0.83s
   (0 above 4) and adding a 50ms cooldown dropped 1.39s (7 above 4) for only
-  0.4% less wall time. Every change is logged as `speed_ratio_changed`. Render
-  cadence (60Hz), boot polling (20Hz), boot timeout (30s) and `emulated_us`
-  all follow
+  0.4% less wall time. On the RP2040 at 250MHz, Max gains only where the board
+  already runs faster than real time (`SIEVE` 1.12x, the other six commands
+  1.00x) and drops what 4.77MHz drops (31.8s vs 31.3s, 0 above ratio 4). Every
+  change is logged as `speed_ratio_changed`. Render cadence (60Hz), boot
+  polling (20Hz), boot timeout (30s) and `emulated_us` all follow
   `g_clock.guest_cycles`, while `cycles` and "vs a real PC/XT" stay in CPU
   cycles relative to 4.77MHz so figures compare across `4.77MHz` and `Max`.
 - Due times come from an anchor where the two clocks agreed, moved forward a
