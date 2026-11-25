@@ -29,7 +29,7 @@ static const BoxItem kVMItems[kNumVMItems] = {
 };
 
 enum {
-  // Two lines for the machine settings (speed/video and memory), plus up to
+  // Two lines for the machine settings (memory and video/speed), plus up to
   // two drive lines, or "No disks.".
   kMaxVMLines = kNumVMDrives / 2 + 2,
 };
@@ -129,17 +129,18 @@ static void OnDraw(DisplayBox* box) {
     line_pointers[0] = "Its vm.cfg has a problem.";
     num_lines = 1;
   } else {
-    char speed[24];
-    snprintf(
-        speed, sizeof(speed), "Speed: %s", VMConfigSpeedLabel(g_machine.speed));
-    snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "%-18sVideo: %s", speed,
-        VMConfigVideoAdapterLabel(g_machine.video_adapter));
-    line_pointers[num_lines] = lines[num_lines];
-    ++num_lines;
     char memory[kVMMemoryLabelLength + 1];
     VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
     snprintf(lines[num_lines], sizeof(lines[num_lines]), "Memory: %s", memory);
+    line_pointers[num_lines] = lines[num_lines];
+    ++num_lines;
+    char video[16];
+    snprintf(
+        video, sizeof(video), "Video: %s",
+        VMConfigVideoAdapterLabel(g_machine.video_adapter));
+    snprintf(
+        lines[num_lines], sizeof(lines[num_lines]), "%-18sSpeed: %s", video,
+        VMConfigSpeedLabel(g_machine.speed));
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
     const uint8_t num_machine_lines = num_lines;
