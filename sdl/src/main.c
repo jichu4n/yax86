@@ -65,7 +65,20 @@ enum {
   // early is trimmed rather than deferred to the next one - deferring would
   // halve the rate instead of capping it.
   kMinStepNs = kNanosecondsPerSecond / 70,
+
+  // Wall-clock window over which --speed max measures sustained throughput.
+  kMaxSpeedWindowNs = kNanosecondsPerSecond / 4,
+  // Batches averaging more than this many CPU cycles per retired instruction
+  // are dominated by HLT waits or bulk REP runs, so --speed max holds its
+  // current ratio across them.
+  kMaxCyclesPerBusyInstruction = 64,
 };
+
+// Whether --speed max is active, and its controller window state.
+static bool g_is_max_speed = false;
+static uint64_t g_max_speed_window_wall_ns = 0;
+static uint64_t g_max_speed_window_busy_ns = 0;
+static uint64_t g_max_speed_window_cycles = 0;
 
 // The video adapter installed in the emulated machine, and its metadata.
 static YVideoAdapter g_video_adapter = Y_VIDEO_ADAPTER_CGA;
@@ -90,6 +103,59 @@ static void MainEndRenderRegion(Y_UNUSED struct YVideoState* video) {
 static void MainSetPCSpeakerFrequency(
     Y_UNUSED YPlatformState* platform, uint32_t frequency_hz) {
   AudioSetFrequency(frequency_hz);
+}
+
+// Adjust cycles_per_pit_tick under --speed max from recent non-idle throughput,
+// leaving headroom for rendering and capping at
+// Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK (64x 4.77MHz).
+static void MainUpdateMaxSpeed(
+    uint64_t wall_ns, uint64_t busy_ns, uint32_t active_cycles,
+    uint64_t run_instructions) {
+  if (active_cycles == 0 || busy_ns == 0 ||
+      run_instructions * kMaxCyclesPerBusyInstruction < active_cycles) {
+    return;
+  }
+  const uint32_t current = g_platform.cycles_per_pit_tick;
+  // If a single frame took longer to emulate than its wall-clock slice, step
+  // down immediately so guest time does not fall behind.
+  if (busy_ns > wall_ns && current > Y_PLATFORM_CYCLES_PER_PIT_TICK) {
+    uint32_t reduced = (uint32_t)((uint64_t)current * wall_ns / busy_ns);
+    if (reduced >= current) {
+      reduced = current - 1;
+    }
+    if (reduced < Y_PLATFORM_CYCLES_PER_PIT_TICK) {
+      reduced = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+    }
+    YPlatformSetCyclesPerPITTick(&g_platform, reduced);
+    g_max_speed_window_wall_ns = 0;
+    g_max_speed_window_busy_ns = 0;
+    g_max_speed_window_cycles = 0;
+    return;
+  }
+  g_max_speed_window_wall_ns += wall_ns;
+  g_max_speed_window_busy_ns += busy_ns;
+  g_max_speed_window_cycles += active_cycles;
+  if (g_max_speed_window_wall_ns < kMaxSpeedWindowNs) {
+    return;
+  }
+  // Target 80% of measured host throughput so frame pacing and rendering stay
+  // smooth.
+  const double measured_ratio =
+      (double)g_max_speed_window_cycles * Y_PLATFORM_CYCLES_PER_PIT_TICK *
+      kNanosecondsPerSecond /
+      ((double)g_max_speed_window_busy_ns * Y_PLATFORM_CPU_CYCLES_PER_SECOND);
+  const double target_double = measured_ratio * 0.80;
+  uint32_t target = target_double >= Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK
+                        ? Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK
+                    : target_double <= Y_PLATFORM_CYCLES_PER_PIT_TICK
+                        ? Y_PLATFORM_CYCLES_PER_PIT_TICK
+                        : (uint32_t)target_double;
+  if (target != current) {
+    YPlatformSetCyclesPerPITTick(&g_platform, target);
+  }
+  g_max_speed_window_wall_ns = 0;
+  g_max_speed_window_busy_ns = 0;
+  g_max_speed_window_cycles = 0;
 }
 
 void MainTick(void) {
@@ -137,6 +203,11 @@ void MainTick(void) {
   uint32_t remaining_ticks =
       (uint32_t)(elapsed_ns * YPlatformGetCPUCyclesPerSecond(&g_platform) /
                  kNanosecondsPerSecond);
+  const uint32_t run_start_ticks = g_platform.ticks;
+  const uint32_t run_start_idle_skipped = g_platform.idle_skipped_cycles;
+  const uint64_t run_start_instructions =
+      YCPUNumInstructionsRetired(&g_platform.cpu);
+  const uint64_t run_start_ns = SDL_GetTicksNS();
   while (!g_cpu_stopped && remaining_ticks > 0) {
     const uint32_t start_tick = g_platform.ticks;
     const YPlatformRunStatus status =
@@ -164,6 +235,17 @@ void MainTick(void) {
         "execution_stopped", Y_LOG_INT("status", status));
     g_cpu_stopped = true;
   }
+  if (g_is_max_speed && !g_cpu_stopped && elapsed_ns > 0) {
+    const uint64_t run_ns = SDL_GetTicksNS() - run_start_ns;
+    const uint32_t run_cycles = g_platform.ticks - run_start_ticks;
+    const uint32_t skipped_cycles =
+        g_platform.idle_skipped_cycles - run_start_idle_skipped;
+    const uint32_t active_cycles =
+        run_cycles > skipped_cycles ? run_cycles - skipped_cycles : 0;
+    const uint64_t run_instructions =
+        YCPUNumInstructionsRetired(&g_platform.cpu) - run_start_instructions;
+    MainUpdateMaxSpeed(elapsed_ns, run_ns, active_cycles, run_instructions);
+  }
 
   // 3. Render
   // Bring the CRT beam up to the current cycle before drawing from it. The
@@ -181,11 +263,18 @@ static const struct {
     {"1x", 1}, {"2x", 2}, {"4x", 4}, {"8x", 8}, {"16x", 16},
 };
 
-static bool MainParseSpeed(const char* value, uint32_t* cycles_per_pit_tick) {
+static bool MainParseSpeed(
+    const char* value, uint32_t* cycles_per_pit_tick, bool* is_max_speed) {
+  if (strcasecmp(value, "max") == 0) {
+    *cycles_per_pit_tick = Y_PLATFORM_CYCLES_PER_PIT_TICK;
+    *is_max_speed = true;
+    return true;
+  }
   for (size_t i = 0; i < sizeof(kSpeeds) / sizeof(kSpeeds[0]); ++i) {
     if (strcasecmp(value, kSpeeds[i].name) == 0) {
       *cycles_per_pit_tick =
           kSpeeds[i].multiplier * Y_PLATFORM_CYCLES_PER_PIT_TICK;
+      *is_max_speed = false;
       return true;
     }
   }
@@ -196,8 +285,8 @@ static void MainPrintUsage(const char* program_name) {
   fprintf(
       stderr,
       "Usage: %s [floppy image] [--fd-type 360k|720k|1.2m|1.44m (default: "
-      "360k)] [--speed 1x|2x|4x|8x|16x (default: 1x)] [--mda|--cga] [--hdd "
-      "[image]] [--no-hdd]\n",
+      "360k)] [--speed 1x|2x|4x|8x|16x|max (default: 1x)] [--mda|--cga] "
+      "[--hdd [image]] [--no-hdd]\n",
       program_name);
 }
 
@@ -234,7 +323,7 @@ int main(int argc, char* argv[]) {
       }
     } else if (strcmp(argv[i], "--speed") == 0 && i + 1 < argc) {
       const char* value = argv[++i];
-      if (!MainParseSpeed(value, &cycles_per_pit_tick)) {
+      if (!MainParseSpeed(value, &cycles_per_pit_tick, &g_is_max_speed)) {
         APP_ERROR("invalid_speed", Y_LOG_STRING("speed", value));
         MainPrintUsage(argv[0]);
         return 1;
