@@ -24,9 +24,10 @@
 enum {
   // The status rows: the two text rows at the bottom of the panel.
   kDisplayNumStatusRows = 2,
-  // The most rows a box can have. The tallest, the in-VM menu's status page,
-  // needs 10. A row is 160 bytes of SRAM.
-  kDisplayBoxMaxRows = 12,
+  // The most rows a box can have. The tallest, the VM summary page with two
+  // machine lines and two drive lines over its four items, needs 13. A row is
+  // 160 bytes of SRAM.
+  kDisplayBoxMaxRows = 13,
 };
 
 // A row of the runtime's own text: code page 437 characters, and a CGA

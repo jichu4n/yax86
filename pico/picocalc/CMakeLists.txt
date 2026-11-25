@@ -207,6 +207,7 @@ add_executable(yax86_picocalc
     src/vm_floppy_type_screen.c
     src/vm_video_adapter_screen.c
     src/vm_memory_screen.c
+    src/vm_speed_screen.c
     src/vm_config_screen.c
     src/vm_name_screen.c
     src/vm_screen.c

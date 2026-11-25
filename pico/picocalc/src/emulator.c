@@ -1538,12 +1538,25 @@ void EmulatorInit(
   g_guest_ram = guest_ram;
 }
 
+static void SetSpeedMode(VMSpeed speed) {
+  g_speed_mode = speed;
+  if (speed == kVMSpeed1x) {
+    YPlatformSetCyclesPerPITTick(&g_platform, Y_PLATFORM_CYCLES_PER_PIT_TICK);
+    g_speed_controller.target_x100 = kMaxSpeedMinRatioX100;
+    g_speed_controller.phase = 0;
+    g_speed_controller.last_lag_us = 0;
+  }
+  ResetMaxSpeedWindow();
+}
+
 void EmulatorRun(VMConfig* vm) {
   g_vm = vm;
   g_has_vm = vm != NULL;
   g_speed_mode = g_has_vm ? vm->speed : kVMSpeed1x;
   g_session.config = vm;
   g_session.fdc = &g_platform.fdc;
+  g_session.speed = &g_speed_mode;
+  g_session.set_speed = SetSpeedMode;
   OpenDrives();
   RunVM(InitVM());
 }
