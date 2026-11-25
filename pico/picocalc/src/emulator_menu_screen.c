@@ -141,8 +141,9 @@ static ScreenResult OnKey(SouthbridgeKeyEvent event) {
 }
 
 // Back from another page, with the item that opened it still selected. A
-// Reset or Power off answered yes closes the menu, for the emulator to carry
-// it out.
+// Speed change applies the new mode and closes the menu (choosing the same
+// speed stays in the menu). A Reset or Power off answered yes closes the menu,
+// for the emulator to carry it out.
 static ScreenResult OnResume(void) {
   if (g_is_choosing_speed) {
     g_is_choosing_speed = false;
