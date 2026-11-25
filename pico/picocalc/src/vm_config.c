@@ -13,6 +13,7 @@ const char kVMsFolder[] = "yax86/vm";
 static const char kConfigFile[] = "vm.cfg";
 static const char kVideoAdapterKey[] = "video_adapter";
 static const char kMemoryKBKey[] = "memory_kb";
+static const char kSpeedKey[] = "speed";
 
 const char* const kVMDriveLabels[kNumVMDrives] = {
     [kVMDriveFD1] = "FD1",
@@ -62,6 +63,16 @@ static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
     [Y_VIDEO_ADAPTER_CGA] = "CGA",
 };
 
+static const char* const kSpeedNames[kNumVMSpeeds] = {
+    [kVMSpeed1x] = "1x",
+    [kVMSpeedMax] = "max",
+};
+
+static const char* const kSpeedLabels[kNumVMSpeeds] = {
+    [kVMSpeed1x] = "4.77MHz",
+    [kVMSpeedMax] = "Max",
+};
+
 const char* VMConfigFloppyDriveTypeName(YFDCDriveType type) {
   return kFloppyDriveTypeNames
       [type < Y_FDC_NUM_DRIVE_TYPES ? type : Y_FDC_DRIVE_TYPE_360KB];
@@ -96,6 +107,24 @@ static bool VideoAdapterFromName(const char* name, YVideoAdapter* adapter) {
   for (uint8_t i = 0; i < Y_VIDEO_NUM_ADAPTERS; ++i) {
     if (strcasecmp(name, kVideoAdapterNames[i]) == 0) {
       *adapter = (YVideoAdapter)i;
+      return true;
+    }
+  }
+  return false;
+}
+
+const char* VMConfigSpeedName(VMSpeed speed) {
+  return kSpeedNames[speed < kNumVMSpeeds ? speed : kVMSpeed1x];
+}
+
+const char* VMConfigSpeedLabel(VMSpeed speed) {
+  return kSpeedLabels[speed < kNumVMSpeeds ? speed : kVMSpeed1x];
+}
+
+static bool SpeedFromName(const char* name, VMSpeed* speed) {
+  for (uint8_t i = 0; i < kNumVMSpeeds; ++i) {
+    if (strcasecmp(name, kSpeedNames[i]) == 0) {
+      *speed = (VMSpeed)i;
       return true;
     }
   }
@@ -168,6 +197,13 @@ static bool TakeVMPair(
     config->memory_kb = (uint16_t)memory_kb;
     return true;
   }
+  if (strcmp(key, kSpeedKey) == 0) {
+    if (!SpeedFromName(value, &config->speed)) {
+      snprintf(problem, kVMProblemLength + 1, "speed is not 1x or max");
+      return false;
+    }
+    return true;
+  }
   uint8_t drive = 0;
   while (drive < kNumVMDrives && strcmp(key, kDriveKeys[drive]) != 0) {
     ++drive;
@@ -201,6 +237,7 @@ bool VMConfigRead(
   }
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->memory_kb = kVMDefaultMemoryKB;
+  config->speed = kVMSpeed1x;
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
   return ConfigFileRead(vm->path, TakeVMPair, &reading, problem) ==
@@ -233,7 +270,7 @@ bool VMConfigSave(
   FSFolderOf(vm->path, folder);
   char memory_kb[8];
   snprintf(memory_kb, sizeof(memory_kb), "%u", (unsigned)machine->memory_kb);
-  ConfigFileSetting settings[kNumVMDrives + kNumVMFloppyDrives + 2];
+  ConfigFileSetting settings[kNumVMDrives + kNumVMFloppyDrives + 3];
   for (uint8_t drive = 0; drive < kNumVMDrives; ++drive) {
     values[drive][0] = '\0';
     if (drives[drive] != NULL && drives[drive][0] != '\0' &&
@@ -260,6 +297,10 @@ bool VMConfigSave(
   settings[kNumVMDrives + kNumVMFloppyDrives + 1] = (ConfigFileSetting){
       .key = kMemoryKBKey,
       .value = memory_kb,
+  };
+  settings[kNumVMDrives + kNumVMFloppyDrives + 2] = (ConfigFileSetting){
+      .key = kSpeedKey,
+      .value = VMConfigSpeedName(machine->speed),
   };
   return ConfigFileUpdate(
       vm->path, settings, sizeof(settings) / sizeof(settings[0]), problem);

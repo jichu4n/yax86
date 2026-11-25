@@ -145,9 +145,38 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
 ## Running in real time
 
 - **The VM is paced between batches, and nothing else**: after each
-  batch of 48,000 emulated cycles, `PaceToRealTime()` sleeps until real time
-  catches up. The batches are the same either way, so pacing cannot change
-  what the guest sees.
+  batch of `kPITTicksPerBatch * cycles_per_pit_tick` CPU cycles (48,000 cycles
+  at 4.77MHz, about 10ms of guest time at every clock ratio),
+  `PaceToRealTime()` sleeps until real time catches up with guest time
+  (`g_clock.guest_cycles`, tracked in 4.77MHz-equivalent cycles with an exact
+  remainder so ratio changes introduce no rounding drift, and equal to
+  `g_clock.cycles` at 4.77MHz). The batches are the same either way at 4.77MHz,
+  so pacing cannot change what the guest sees.
+- **Max mode (`speed=max` in `vm.cfg`) adjusts `cycles_per_pit_tick` between
+  batches** from power on, on both RP2040 and RP2350, so the CPU runs close to
+  flat out while guest time tracks real time. The controller keeps a fractional
+  target `target_x100` in quarter-ratio steps (hundredths, `400` = 4.77MHz,
+  step `25` = 0.25 ratio = 6.25% of 4.77MHz) clamped to
+  `[400, Y_PLATFORM_MAX_CYCLES_PER_PIT_TICK * 100]`, and `RunBatch()` alternates
+  adjacent integer ratios (`floor` and `floor + 1`) via a Bresenham phase
+  accumulator so the average matches `target_x100`. Stepping up is driven by
+  250ms windows of active CPU throughput (subtracting `idle_skipped_cycles`
+  and excluding `HLT`/bulk-`REP` batches with >64 active cycles per retired
+  instruction, leaving 0.20 headroom and only when not lagging). Stepping down
+  is driven by pacing lag in `PaceToRealTime()` (stepping down by 0.50 as soon
+  as lag reaches 15ms and is not shrinking, well before `kMaxLagUs = 100ms`
+  drops guest time), so slow stretches of any instruction mix - including
+  `REP MOVSW` scrolling and SD I/O - react before dropping time. On the Pico 2
+  `workloads/bench.txt` (0.38s dropped at 4.77MHz), 15ms with no cooldown
+  drops 0.62s with 0 drops above ratio 4; 25ms with no cooldown dropped 0.83s
+  (0 above 4) and adding a 50ms cooldown dropped 1.39s (7 above 4) for only
+  0.4% less wall time. On the RP2040 at 250MHz, Max gains only where the board
+  already runs faster than real time (`SIEVE` 1.12x, the other six commands
+  1.00x) and drops what 4.77MHz drops (31.8s vs 31.3s, 0 above ratio 4). Every
+  change is logged as `speed_ratio_changed`. Render cadence (60Hz), boot
+  polling (20Hz), boot timeout (30s) and `emulated_us` all follow
+  `g_clock.guest_cycles`, while `cycles` and "vs a real PC/XT" stay in CPU
+  cycles relative to 4.77MHz so figures compare across `4.77MHz` and `Max`.
 - Due times come from an anchor where the two clocks agreed, moved forward a
   whole emulated second at a time, so nothing overflows or rounds away.
 - **A VM that falls behind catches up by at most 100ms**, like the SDL
@@ -381,6 +410,7 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   hd1=hd1.img
   video_adapter=cga
   memory_kb=640
+  speed=1x
   ```
 
   `fd1` and `fd2` are 360KB, 720KB, 1.2MB or 1.44MB floppies, their format
@@ -389,16 +419,17 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   a 720KB image and no `fdN_type` fails to open with `"wrong disk type for
   drive"` until `Drive type` is set to `720KB`), `hd1` and `hd2` the hard disk
   controller's master and slave, each the core's 10MB drive, `video_adapter` is
-  `cga` or `mda`, `cga` without it, and `memory_kb` is a multiple of 16 from 64
-  to 640, 640 without it. 16KB is the granularity GLaBIOS probes conventional
-  memory at; MS-DOS 3.30 stops with `Configuration too large for memory` at
-  64KB, so 128KB is the smallest size it boots in. Without a VM, the built-in
-  360KB floppy runs with the CGA and 640KB. A key `vm.cfg` has that this
+  `cga` or `mda`, `cga` without it, `memory_kb` is a multiple of 16 from 64
+  to 640, 640 without it, and `speed` is `1x` or `max`, `1x` without it. 16KB
+  is the granularity GLaBIOS probes conventional memory at; MS-DOS 3.30 stops
+  with `Configuration too large for memory` at 64KB, so 128KB is the smallest
+  size it boots in. Without a VM, the built-in 360KB floppy runs with the CGA,
+  640KB and `1x`. A key `vm.cfg` has that this
   firmware does not know is logged as `vm_config_key_ignored` on each read,
   with the file's path and the key, and skipped, so a file written by a later
   firmware still reads and a Configure save keeps the line; a bad value or path
   is logged as `vm_config_problem`. Loading a VM logs `vm_loaded` with its
-  `path`, `video_adapter` and `memory_kb`.
+  `path`, `video_adapter`, `memory_kb` and `speed`.
 - **A drive can be left out of the machine**, by leaving it out of
   `vm.cfg`. Floppy disk 1 is always there, `fd1=""` or not named holding no
   disk. Floppy disk 2 not named is not there: the BIOS's switches report one
@@ -1162,7 +1193,8 @@ PICO_SDK_PATH=/usr/share/pico-sdk ./pico/picocalc/build.sh pico2
   `psram`, `stack`, `usb`, `keyboard` and `speaker`, facts that hold in any
   mode. Then it gives its own. The emulator's, which `src/emulator.c`
   answers, are the VM's `paging`, `boot`, `display`, starting with
-  `video_adapter`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `menu` and `pacing`. The
+  `video_adapter`, `fd1`, `fd2`, `hd1`, `hd2`, `vm`, `menu`, `speed` (`mode`,
+  `cycles_per_pit_tick`, `cpu_hz`, `cycles`) and `pacing`. The
   launcher's are `display` with whether it is on, its timeout and the font,
   `vm` with the number of VMs, and `menu` with whether it is open, the page
   showing and `boot_delay`; and

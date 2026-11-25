@@ -273,7 +273,10 @@ visibility, and how performance work is measured - are in the root
 - **Time is advanced, not discarded**: `YPlatformSync()` runs across the
   interval, so every device sees every cycle and the timer tick count is
   unchanged. Bounding the skip by the budget is what keeps the clock from
-  running fast.
+  running fast. `YPlatformSkipIdleTime()` also adds the skipped cycles to
+  `platform->idle_skipped_cycles`, so a host measuring execution throughput can
+  diff it across a batch (as with `ticks`) to exclude idle-skipped cycles
+  without writing into core state.
 - It is opt in - a program timing a loop inside its own `INT 28h` handler
   would see time jump. The SDL runtime turns it on after init, the PicoCalc
   once DOS reaches its prompt, since DOS issues `INT 28h` at the date and
