@@ -64,12 +64,12 @@ static const char* const kVideoAdapterLabels[Y_VIDEO_NUM_ADAPTERS] = {
 };
 
 static const char* const kSpeedNames[kNumVMSpeeds] = {
-    [kVMSpeed477MHz] = "1x",
+    [kVMSpeed1x] = "1x",
     [kVMSpeedMax] = "max",
 };
 
 static const char* const kSpeedLabels[kNumVMSpeeds] = {
-    [kVMSpeed477MHz] = "4.77MHz",
+    [kVMSpeed1x] = "4.77MHz",
     [kVMSpeedMax] = "Max",
 };
 
@@ -114,11 +114,11 @@ static bool VideoAdapterFromName(const char* name, YVideoAdapter* adapter) {
 }
 
 const char* VMConfigSpeedName(VMSpeed speed) {
-  return kSpeedNames[speed < kNumVMSpeeds ? speed : kVMSpeed477MHz];
+  return kSpeedNames[speed < kNumVMSpeeds ? speed : kVMSpeed1x];
 }
 
 const char* VMConfigSpeedLabel(VMSpeed speed) {
-  return kSpeedLabels[speed < kNumVMSpeeds ? speed : kVMSpeed477MHz];
+  return kSpeedLabels[speed < kNumVMSpeeds ? speed : kVMSpeed1x];
 }
 
 static bool SpeedFromName(const char* name, VMSpeed* speed) {
@@ -237,7 +237,7 @@ bool VMConfigRead(
   }
   config->video_adapter = Y_VIDEO_ADAPTER_CGA;
   config->memory_kb = kVMDefaultMemoryKB;
-  config->speed = kVMSpeed477MHz;
+  config->speed = kVMSpeed1x;
   VMReading reading = {.config = config};
   FSFolderOf(vm->path, reading.folder);
   return ConfigFileRead(vm->path, TakeVMPair, &reading, problem) ==

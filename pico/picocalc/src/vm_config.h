@@ -82,7 +82,7 @@ typedef struct VMEntry {
 // Speed mode for a VM: 4.77MHz (a real PC/XT, the default) or Max (runs the
 // CPU as fast as the host allows while keeping guest time locked to real time).
 typedef enum VMSpeed {
-  kVMSpeed477MHz = 0,
+  kVMSpeed1x = 0,
   kVMSpeedMax,
   kNumVMSpeeds,
 } VMSpeed;
@@ -109,7 +109,7 @@ typedef struct VMConfig {
   YVideoAdapter video_adapter;
   // The VM's conventional memory in KB: kVMDefaultMemoryKB when not named.
   uint16_t memory_kb;
-  // The VM's speed mode: kVMSpeed477MHz when not named.
+  // The VM's speed mode: kVMSpeed1x when not named.
   VMSpeed speed;
 } VMConfig;
 

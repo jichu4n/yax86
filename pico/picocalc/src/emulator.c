@@ -1541,7 +1541,7 @@ void EmulatorInit(
 void EmulatorRun(VMConfig* vm) {
   g_vm = vm;
   g_has_vm = vm != NULL;
-  g_speed_mode = g_has_vm ? vm->speed : kVMSpeed477MHz;
+  g_speed_mode = g_has_vm ? vm->speed : kVMSpeed1x;
   g_session.config = vm;
   g_session.fdc = &g_platform.fdc;
   OpenDrives();

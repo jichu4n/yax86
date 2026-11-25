@@ -83,7 +83,7 @@ ScreenResult VMConfigScreenOpenNew(VMManager* vm_manager) {
   g_machine = (VMMachine){
       .video_adapter = Y_VIDEO_ADAPTER_CGA,
       .memory_kb = kVMDefaultMemoryKB,
-      .speed = kVMSpeed477MHz,
+      .speed = kVMSpeed1x,
   };
   SelectItem(kFormName);
   return ScreenOpen(&kVMConfigScreen);
