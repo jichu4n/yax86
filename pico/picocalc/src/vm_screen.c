@@ -29,9 +29,9 @@ static const BoxItem kVMItems[kNumVMItems] = {
 };
 
 enum {
-  // One line for the memory size and video adapter, plus up to two drive
-  // lines, or "No disks.".
-  kMaxVMLines = kNumVMDrives / 2 + 1,
+  // Two lines for the machine settings (speed/video and memory), plus up to
+  // two drive lines, or "No disks.".
+  kMaxVMLines = kNumVMDrives / 2 + 2,
 };
 
 extern const Screen kVMScreen;
@@ -129,14 +129,20 @@ static void OnDraw(DisplayBox* box) {
     line_pointers[0] = "Its vm.cfg has a problem.";
     num_lines = 1;
   } else {
-    char memory[kVMMemoryLabelLength + 1];
-    VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
+    char speed[24];
     snprintf(
-        lines[num_lines], sizeof(lines[num_lines]), "%s  %s  %s", memory,
-        VMConfigVideoAdapterLabel(g_machine.video_adapter),
-        VMConfigSpeedLabel(g_machine.speed));
+        speed, sizeof(speed), "Speed: %s", VMConfigSpeedLabel(g_machine.speed));
+    snprintf(
+        lines[num_lines], sizeof(lines[num_lines]), "%-18sVideo: %s", speed,
+        VMConfigVideoAdapterLabel(g_machine.video_adapter));
     line_pointers[num_lines] = lines[num_lines];
     ++num_lines;
+    char memory[kVMMemoryLabelLength + 1];
+    VMMemoryFormat(g_machine.memory_kb, memory, sizeof(memory));
+    snprintf(lines[num_lines], sizeof(lines[num_lines]), "Memory: %s", memory);
+    line_pointers[num_lines] = lines[num_lines];
+    ++num_lines;
+    const uint8_t num_machine_lines = num_lines;
     for (uint8_t first = 0; first < kNumVMDrives; first += 2) {
       char label_a[8];
       char label_b[8];
@@ -154,7 +160,7 @@ static void OnDraw(DisplayBox* box) {
       line_pointers[num_lines] = lines[num_lines];
       ++num_lines;
     }
-    if (num_lines == 1) {
+    if (num_lines == num_machine_lines) {
       line_pointers[num_lines] = "No disks.";
       ++num_lines;
     }
